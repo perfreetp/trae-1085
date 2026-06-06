@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Plus,
   Search,
@@ -16,27 +16,78 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatusTag } from '@/components/common/StatusTag';
-import { mockAnnouncements } from '@/data/announcements';
+import { useAppStore } from '@/store/useAppStore';
 import type { Announcement } from '@/types';
 import { getAnnouncementTypeName, formatDate, formatDateTime } from '@/utils/helpers';
 
-const Announcements: React.FC = () => {
-  const [announcements, setAnnouncements] = useState<Announcement[]>(mockAnnouncements);
+const AnnouncementsPage: React.FC = () => {
+  const { announcements, addAnnouncement, publishAnnouncement, deleteAnnouncement } = useAppStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [publishForm, setPublishForm] = useState({
+    title: '',
+    type: 'notice' as 'notice' | 'warning' | 'policy',
+    content: '',
+  });
 
-  const filteredAnnouncements = announcements.filter((a) => {
+  const stats = useMemo(() => ({
+    notice: announcements.filter(a => a.type === 'notice').length,
+    warning: announcements.filter(a => a.type === 'warning').length,
+    policy: announcements.filter(a => a.type === 'policy').length,
+  }), [announcements]);
+
+  const filteredAnnouncements = useMemo(() => announcements.filter((a) => {
     const matchSearch = a.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       a.content.toLowerCase().includes(searchTerm.toLowerCase());
     const matchType = typeFilter === 'all' || a.type === typeFilter;
     return matchSearch && matchType;
-  });
+  }), [announcements, searchTerm, typeFilter]);
+
+  const currentAnnouncement = useMemo(() =>
+    selectedAnnouncement ? announcements.find(a => a.id === selectedAnnouncement.id) || null : null,
+  [announcements, selectedAnnouncement]);
 
   const handleViewDetail = (announcement: Announcement) => {
     setSelectedAnnouncement(announcement);
     setShowDetailModal(true);
+  };
+
+  const handleOpenPublishModal = () => {
+    setPublishForm({
+      title: '',
+      type: 'notice',
+      content: '',
+    });
+    setShowPublishModal(true);
+  };
+
+  const handlePublishNew = () => {
+    if (publishForm.title && publishForm.content) {
+      addAnnouncement({
+        title: publishForm.title,
+        type: publishForm.type,
+        content: publishForm.content,
+        status: 'published',
+        author: '管理员',
+        publishTime: new Date().toISOString(),
+      });
+      setShowPublishModal(false);
+    }
+  };
+
+  const handlePublishDraft = (id: string) => {
+    publishAnnouncement(id);
+    setShowDetailModal(false);
+  };
+
+  const handleDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm('确定要删除这条公告吗？')) {
+      deleteAnnouncement(id);
+    }
   };
 
   const getTypeIcon = (type: string) => {
@@ -64,21 +115,19 @@ const Announcements: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900">公告管理</h1>
           <p className="mt-1 text-sm text-gray-500">发布和管理通知公告、预警提示和政策法规</p>
         </div>
-        <Button>
+        <Button onClick={handleOpenPublishModal}>
           <Plus size={18} className="mr-2" />
           发布公告
         </Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">通知公告</p>
-                <p className="text-2xl font-bold text-blue-600 mt-1">
-                  {announcements.filter(a => a.type === 'notice').length}
-                </p>
+                <p className="text-2xl font-bold text-blue-600 mt-1">{stats.notice}</p>
               </div>
               <div className="p-3 rounded-xl bg-blue-100 text-blue-600">
                 <Bell size={24} />
@@ -91,9 +140,7 @@ const Announcements: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">预警提示</p>
-                <p className="text-2xl font-bold text-amber-600 mt-1">
-                  {announcements.filter(a => a.type === 'warning').length}
-                </p>
+                <p className="text-2xl font-bold text-amber-600 mt-1">{stats.warning}</p>
               </div>
               <div className="p-3 rounded-xl bg-amber-100 text-amber-600">
                 <AlertTriangle size={24} />
@@ -106,9 +153,7 @@ const Announcements: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">政策法规</p>
-                <p className="text-2xl font-bold text-purple-600 mt-1">
-                  {announcements.filter(a => a.type === 'policy').length}
-                </p>
+                <p className="text-2xl font-bold text-purple-600 mt-1">{stats.policy}</p>
               </div>
               <div className="p-3 rounded-xl bg-purple-100 text-purple-600">
                 <FileText size={24} />
@@ -162,7 +207,7 @@ const Announcements: React.FC = () => {
                       {getTypeIcon(announcement.type)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-wrap">
                         <h3 className="font-semibold text-gray-900">{announcement.title}</h3>
                         <StatusTag status={announcement.status} type="announcement" />
                       </div>
@@ -183,21 +228,20 @@ const Announcements: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 ml-4">
+                  <div className="flex items-center gap-1 ml-4" onClick={(e) => e.stopPropagation()}>
                     {announcement.status === 'draft' && (
-                      <Button size="sm" onClick={(e) => { e.stopPropagation(); }}>
+                      <Button size="sm" onClick={() => handlePublishDraft(announcement.id)}>
                         <Send size={14} className="mr-1" /> 发布
                       </Button>
                     )}
                     <button
                       className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                      onClick={(e) => { e.stopPropagation(); }}
                     >
                       <Edit size={18} />
                     </button>
                     <button
                       className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      onClick={(e) => { e.stopPropagation(); }}
+                      onClick={(e) => handleDelete(announcement.id, e)}
                     >
                       <Trash2 size={18} />
                     </button>
@@ -205,21 +249,27 @@ const Announcements: React.FC = () => {
                 </div>
               </div>
             ))}
+            {filteredAnnouncements.length === 0 && (
+              <div className="text-center py-12 text-gray-400">
+                <FileText size={48} className="mx-auto mb-4 opacity-50" />
+                <p>暂无公告记录</p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {showDetailModal && selectedAnnouncement && (
+      {showDetailModal && currentAnnouncement && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-xl">
             <div className="flex items-center justify-between p-6 border-b border-gray-100">
               <div className="flex items-center gap-3">
-                <div className={`p-3 rounded-xl ${getTypeColor(selectedAnnouncement.type)}`}>
-                  {getTypeIcon(selectedAnnouncement.type)}
+                <div className={`p-3 rounded-xl ${getTypeColor(currentAnnouncement.type)}`}>
+                  {getTypeIcon(currentAnnouncement.type)}
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">公告详情</h2>
-                  <p className="text-sm text-gray-500">{getAnnouncementTypeName(selectedAnnouncement.type)}</p>
+                  <p className="text-sm text-gray-500">{getAnnouncementTypeName(currentAnnouncement.type)}</p>
                 </div>
               </div>
               <button
@@ -231,30 +281,30 @@ const Announcements: React.FC = () => {
             </div>
             <div className="p-6 space-y-6">
               <div>
-                <h3 className="text-xl font-bold text-gray-900">{selectedAnnouncement.title}</h3>
-                <div className="mt-2 flex items-center gap-4 text-sm text-gray-500">
+                <h3 className="text-xl font-bold text-gray-900">{currentAnnouncement.title}</h3>
+                <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-gray-500">
                   <span className="flex items-center gap-1">
                     <User size={14} />
-                    {selectedAnnouncement.author}
+                    {currentAnnouncement.author}
                   </span>
                   <span className="flex items-center gap-1">
                     <Calendar size={14} />
-                    {selectedAnnouncement.publishTime
-                      ? formatDateTime(selectedAnnouncement.publishTime)
-                      : `创建于 ${formatDateTime(selectedAnnouncement.createdAt)}`
+                    {currentAnnouncement.publishTime
+                      ? formatDateTime(currentAnnouncement.publishTime)
+                      : `创建于 ${formatDateTime(currentAnnouncement.createdAt)}`
                     }
                   </span>
                   <span className="flex items-center gap-1">
                     <Eye size={14} />
-                    {selectedAnnouncement.views} 次阅读
+                    {currentAnnouncement.views} 次阅读
                   </span>
-                  <StatusTag status={selectedAnnouncement.status} type="announcement" />
+                  <StatusTag status={currentAnnouncement.status} type="announcement" />
                 </div>
               </div>
 
               <div className="border-t border-gray-100 pt-6">
                 <div className="prose max-w-none">
-                  {selectedAnnouncement.content.split('\n').map((paragraph, i) => (
+                  {currentAnnouncement.content.split('\n').map((paragraph, i) => (
                     <p key={i} className="text-gray-700 leading-relaxed mb-4">
                       {paragraph}
                     </p>
@@ -264,9 +314,66 @@ const Announcements: React.FC = () => {
             </div>
             <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
               <Button variant="secondary" onClick={() => setShowDetailModal(false)}>关闭</Button>
-              {selectedAnnouncement.status === 'draft' && (
-                <Button>立即发布</Button>
+              {currentAnnouncement.status === 'draft' && (
+                <Button onClick={() => handlePublishDraft(currentAnnouncement.id)}>立即发布</Button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPublishModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-xl">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">发布公告</h2>
+              <button
+                onClick={() => setShowPublishModal(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">公告标题</label>
+                <input
+                  type="text"
+                  value={publishForm.title}
+                  onChange={(e) => setPublishForm(p => ({ ...p, title: e.target.value }))}
+                  placeholder="请输入公告标题"
+                  className="w-full h-11 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">公告类型</label>
+                <select
+                  value={publishForm.type}
+                  onChange={(e) => setPublishForm(p => ({ ...p, type: e.target.value as 'notice' | 'warning' | 'policy' }))}
+                  className="w-full h-11 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="notice">通知公告</option>
+                  <option value="warning">预警提示</option>
+                  <option value="policy">政策法规</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">公告内容</label>
+                <textarea
+                  value={publishForm.content}
+                  onChange={(e) => setPublishForm(p => ({ ...p, content: e.target.value }))}
+                  rows={8}
+                  placeholder="请输入公告内容..."
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
+              <Button variant="secondary" onClick={() => setShowPublishModal(false)}>取消</Button>
+              <Button onClick={handlePublishNew} disabled={!publishForm.title || !publishForm.content}>
+                <Send size={16} className="mr-2" />
+                立即发布
+              </Button>
             </div>
           </div>
         </div>
@@ -275,4 +382,4 @@ const Announcements: React.FC = () => {
   );
 };
 
-export default Announcements;
+export default AnnouncementsPage;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   LineChart,
   Line,
@@ -30,26 +30,176 @@ import {
   FileText,
 } from 'lucide-react';
 import {
-  monthlyTrendData,
   obstacleTypeData,
   riskLevelData,
-  mockStatistics,
 } from '@/data/reports';
 
+type TimeRange = 'month' | 'quarter' | 'year';
+
 const Reports = () => {
-  const [timeRange, setTimeRange] = useState<'month' | 'quarter' | 'year'>('month');
+  const [timeRange, setTimeRange] = useState<TimeRange>('month');
 
-  const taskCompletionData = [
-    { name: '第1周', completed: 15, total: 20 },
-    { name: '第2周', completed: 18, total: 22 },
-    { name: '第3周', completed: 12, total: 18 },
-    { name: '第4周', completed: 20, total: 25 },
-  ];
+  const statisticsByTimeRange = useMemo(() => {
+    const base = {
+      totalObstacles: 156,
+      pendingTasks: 12,
+      newThisMonth: 23,
+      overheightWarnings: 5,
+      taskCompletionRate: 78.5,
+      reportProcessingRate: 85.2,
+    };
+    
+    switch (timeRange) {
+      case 'month':
+        return {
+          ...base,
+          totalObstacles: 156,
+          newThisMonth: 23,
+          overheightWarnings: 5,
+          taskCompletionRate: 78.5,
+          reportProcessingRate: 85.2,
+          pendingTasks: 12,
+        };
+      case 'quarter':
+        return {
+          ...base,
+          totalObstacles: 142,
+          newThisMonth: 68,
+          overheightWarnings: 12,
+          taskCompletionRate: 82.3,
+          reportProcessingRate: 88.7,
+          pendingTasks: 8,
+        };
+      case 'year':
+        return {
+          ...base,
+          totalObstacles: 156,
+          newThisMonth: 245,
+          overheightWarnings: 38,
+          taskCompletionRate: 86.4,
+          reportProcessingRate: 91.2,
+          pendingTasks: 5,
+        };
+      default:
+        return base;
+    }
+  }, [timeRange]);
 
-  const areaTrendData = monthlyTrendData.map((item) => ({
-    ...item,
-    total: item.obstacles + item.tasks + item.reports,
-  }));
+  const trendDataByTimeRange = useMemo(() => {
+    switch (timeRange) {
+      case 'month':
+        return [
+          { name: '第1周', obstacles: 5, tasks: 3, reports: 2 },
+          { name: '第2周', obstacles: 7, tasks: 5, reports: 3 },
+          { name: '第3周', obstacles: 6, tasks: 4, reports: 2 },
+          { name: '第4周', obstacles: 5, tasks: 0, reports: 1 },
+        ];
+      case 'quarter':
+        return [
+          { name: '4月', obstacles: 20, tasks: 15, reports: 11 },
+          { name: '5月', obstacles: 22, tasks: 18, reports: 13 },
+          { name: '6月', obstacles: 26, tasks: 12, reports: 8 },
+        ];
+      case 'year':
+        return [
+          { name: '1月', obstacles: 12, tasks: 8, reports: 5 },
+          { name: '2月', obstacles: 15, tasks: 10, reports: 7 },
+          { name: '3月', obstacles: 18, tasks: 12, reports: 9 },
+          { name: '4月', obstacles: 20, tasks: 15, reports: 11 },
+          { name: '5月', obstacles: 22, tasks: 18, reports: 13 },
+          { name: '6月', obstacles: 26, tasks: 12, reports: 8 },
+          { name: '7月', obstacles: 24, tasks: 16, reports: 10 },
+          { name: '8月', obstacles: 28, tasks: 20, reports: 12 },
+          { name: '9月', obstacles: 25, tasks: 14, reports: 9 },
+          { name: '10月', obstacles: 30, tasks: 22, reports: 15 },
+          { name: '11月', obstacles: 27, tasks: 18, reports: 11 },
+          { name: '12月', obstacles: 29, tasks: 20, reports: 13 },
+        ];
+      default:
+        return [];
+    }
+  }, [timeRange]);
+
+  const taskCompletionData = useMemo(() => {
+    switch (timeRange) {
+      case 'month':
+        return [
+          { name: '第1周', completed: 15, total: 20 },
+          { name: '第2周', completed: 18, total: 22 },
+          { name: '第3周', completed: 12, total: 18 },
+          { name: '第4周', completed: 20, total: 25 },
+        ];
+      case 'quarter':
+        return [
+          { name: '4月', completed: 45, total: 55 },
+          { name: '5月', completed: 52, total: 60 },
+          { name: '6月', completed: 48, total: 58 },
+        ];
+      case 'year':
+        return [
+          { name: 'Q1', completed: 120, total: 145 },
+          { name: 'Q2', completed: 145, total: 173 },
+          { name: 'Q3', completed: 135, total: 162 },
+          { name: 'Q4', completed: 158, total: 180 },
+        ];
+      default:
+        return [];
+    }
+  }, [timeRange]);
+
+  const areaTrendData = useMemo(() => {
+    return trendDataByTimeRange.map((item) => ({
+      ...item,
+      total: item.obstacles + item.tasks + item.reports,
+    }));
+  }, [trendDataByTimeRange]);
+
+  const trendTitle = useMemo(() => {
+    switch (timeRange) {
+      case 'month': return '本周趋势分析';
+      case 'quarter': return '季度趋势分析';
+      case 'year': return '年度趋势分析';
+      default: return '趋势分析';
+    }
+  }, [timeRange]);
+
+  const quickStats = useMemo(() => {
+    switch (timeRange) {
+      case 'month':
+        return {
+          newObstacles: 23,
+          pendingTasks: 12,
+          warnings: 5,
+        };
+      case 'quarter':
+        return {
+          newObstacles: 68,
+          pendingTasks: 8,
+          warnings: 12,
+        };
+      case 'year':
+        return {
+          newObstacles: 245,
+          pendingTasks: 5,
+          warnings: 38,
+        };
+      default:
+        return {
+          newObstacles: 23,
+          pendingTasks: 12,
+          warnings: 5,
+        };
+    }
+  }, [timeRange]);
+
+  const newObstaclesLabel = useMemo(() => {
+    switch (timeRange) {
+      case 'month': return '本月新增障碍物';
+      case 'quarter': return '本季度新增障碍物';
+      case 'year': return '本年度新增障碍物';
+      default: return '新增障碍物';
+    }
+  }, [timeRange]);
 
   return (
     <div className="space-y-6">
@@ -67,9 +217,9 @@ const Reports = () => {
             ].map((item) => (
               <Button
                 key={item.key}
-                variant={timeRange === item.key ? 'primary' : 'ghost'}
+                variant={timeRange === item.key ? 'primary' : 'secondary'}
                 size="sm"
-                onClick={() => setTimeRange(item.key as typeof timeRange)}
+                onClick={() => setTimeRange(item.key as TimeRange)}
               >
                 {item.label}
               </Button>
@@ -89,28 +239,28 @@ const Reports = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="障碍物总数"
-          value={mockStatistics.totalObstacles}
+          value={statisticsByTimeRange.totalObstacles}
           icon={<BarChart3 className="w-5 h-5" />}
           trend={{ value: 12, isUp: true }}
           color="blue"
         />
         <StatCard
           title="任务完成率"
-          value={`${mockStatistics.taskCompletionRate}%`}
+          value={`${statisticsByTimeRange.taskCompletionRate}%`}
           icon={<CheckCircle className="w-5 h-5" />}
           trend={{ value: 5.2, isUp: true }}
           color="green"
         />
         <StatCard
           title="超高预警"
-          value={mockStatistics.overheightWarnings}
+          value={statisticsByTimeRange.overheightWarnings}
           icon={<AlertTriangle className="w-5 h-5" />}
           trend={{ value: 2, isUp: false }}
           color="amber"
         />
         <StatCard
           title="上报处理率"
-          value={`${mockStatistics.reportProcessingRate}%`}
+          value={`${statisticsByTimeRange.reportProcessingRate}%`}
           icon={<TrendingUp className="w-5 h-5" />}
           trend={{ value: 3.8, isUp: true }}
           color="purple"
@@ -123,15 +273,15 @@ const Reports = () => {
             <CardTitle>
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-blue-600" />
-                月度趋势分析
+                {trendTitle}
               </div>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={320}>
-              <LineChart data={monthlyTrendData}>
+              <LineChart data={trendDataByTimeRange}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                <XAxis dataKey="month" stroke="#94A3B8" fontSize={12} />
+                <XAxis dataKey="name" stroke="#94A3B8" fontSize={12} />
                 <YAxis stroke="#94A3B8" fontSize={12} />
                 <Tooltip
                   contentStyle={{
@@ -273,8 +423,8 @@ const Reports = () => {
           <CardContent className="space-y-4">
             <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
               <div>
-                <p className="text-sm text-slate-600">本月新增障碍物</p>
-                <p className="text-2xl font-bold text-blue-600">{mockStatistics.newThisMonth}</p>
+                <p className="text-sm text-slate-600">{newObstaclesLabel}</p>
+                <p className="text-2xl font-bold text-blue-600">{quickStats.newObstacles}</p>
               </div>
               <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                 <BarChart3 className="w-5 h-5 text-blue-600" />
@@ -283,7 +433,7 @@ const Reports = () => {
             <div className="flex justify-between items-center p-3 bg-emerald-50 rounded-lg">
               <div>
                 <p className="text-sm text-slate-600">待处理任务</p>
-                <p className="text-2xl font-bold text-emerald-600">{mockStatistics.pendingTasks}</p>
+                <p className="text-2xl font-bold text-emerald-600">{quickStats.pendingTasks}</p>
               </div>
               <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
                 <CheckCircle className="w-5 h-5 text-emerald-600" />
@@ -292,7 +442,7 @@ const Reports = () => {
             <div className="flex justify-between items-center p-3 bg-amber-50 rounded-lg">
               <div>
                 <p className="text-sm text-slate-600">超高预警数</p>
-                <p className="text-2xl font-bold text-amber-600">{mockStatistics.overheightWarnings}</p>
+                <p className="text-2xl font-bold text-amber-600">{quickStats.warnings}</p>
               </div>
               <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
                 <AlertTriangle className="w-5 h-5 text-amber-600" />
@@ -315,7 +465,7 @@ const Reports = () => {
           <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={areaTrendData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-              <XAxis dataKey="month" stroke="#94A3B8" fontSize={12} />
+              <XAxis dataKey="name" stroke="#94A3B8" fontSize={12} />
               <YAxis stroke="#94A3B8" fontSize={12} />
               <Tooltip
                 contentStyle={{

@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
-  Plus,
   Search,
   MessageSquare,
   MapPin,
@@ -16,27 +15,79 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatusTag } from '@/components/common/StatusTag';
-import { mockPublicReports } from '@/data/reports';
+import { useAppStore } from '@/store/useAppStore';
 import type { PublicReport } from '@/types';
 import { formatDate, formatDateTime } from '@/utils/helpers';
 
-const PublicReport: React.FC = () => {
-  const [reports, setReports] = useState<PublicReport[]>(mockPublicReports);
+const PublicReportPage: React.FC = () => {
+  const { publicReports, approveReport, rejectReport, mergeReport } = useAppStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState<PublicReport | null>(null);
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergeSource, setMergeSource] = useState<string | null>(null);
+  const [mergeTarget, setMergeTarget] = useState<string>('');
 
-  const filteredReports = reports.filter((r) => {
+  const stats = useMemo(() => ({
+    pending: publicReports.filter(r => r.status === 'pending').length,
+    reviewing: publicReports.filter(r => r.status === 'reviewing').length,
+    processing: publicReports.filter(r => r.status === 'processing').length,
+    completed: publicReports.filter(r => r.status === 'completed').length,
+    merged: publicReports.filter(r => r.status === 'merged').length,
+  }), [publicReports]);
+
+  const filteredReports = useMemo(() => publicReports.filter((r) => {
     const matchSearch = r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       r.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchStatus = statusFilter === 'all' || r.status === statusFilter;
     return matchSearch && matchStatus;
-  });
+  }), [publicReports, searchTerm, statusFilter]);
+
+  const availableMergeTargets = useMemo(() => 
+    publicReports.filter(r => 
+      r.id !== mergeSource && 
+      r.status !== 'merged' && 
+      r.status !== 'rejected'
+    ), 
+  [publicReports, mergeSource]);
+
+  const currentReport = useMemo(() => 
+    selectedReport ? publicReports.find(r => r.id === selectedReport.id) || null : null,
+  [publicReports, selectedReport]);
 
   const handleViewDetail = (report: PublicReport) => {
     setSelectedReport(report);
     setShowDetailModal(true);
+  };
+
+  const handleApprove = (id: string) => {
+    approveReport(id);
+  };
+
+  const handleReject = (id: string) => {
+    rejectReport(id);
+  };
+
+  const handleOpenMerge = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setMergeSource(id);
+    setMergeTarget('');
+    setShowMergeModal(true);
+  };
+
+  const handleConfirmMerge = () => {
+    if (mergeSource && mergeTarget) {
+      mergeReport(mergeSource, mergeTarget);
+      setShowMergeModal(false);
+      setMergeSource(null);
+      setMergeTarget('');
+    }
+  };
+
+  const getMergedTargetTitle = (targetId: string) => {
+    const target = publicReports.find(r => r.id === targetId);
+    return target?.title || '未知线索';
   };
 
   return (
@@ -46,21 +97,15 @@ const PublicReport: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900">群众上报</h1>
           <p className="mt-1 text-sm text-gray-500">受理公众上报的线索，进行审核和处理</p>
         </div>
-        <Button>
-          <Plus size={18} className="mr-2" />
-          新建上报
-        </Button>
       </div>
 
-      <div className="grid grid-cols-5 gap-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">待审核</p>
-                <p className="text-2xl font-bold text-amber-600 mt-1">
-                  {reports.filter(r => r.status === 'pending').length}
-                </p>
+                <p className="text-2xl font-bold text-amber-600 mt-1">{stats.pending}</p>
               </div>
               <div className="p-3 rounded-xl bg-amber-100 text-amber-600">
                 <Clock size={24} />
@@ -73,9 +118,7 @@ const PublicReport: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">审核中</p>
-                <p className="text-2xl font-bold text-blue-600 mt-1">
-                  {reports.filter(r => r.status === 'reviewing').length}
-                </p>
+                <p className="text-2xl font-bold text-blue-600 mt-1">{stats.reviewing}</p>
               </div>
               <div className="p-3 rounded-xl bg-blue-100 text-blue-600">
                 <Eye size={24} />
@@ -88,9 +131,7 @@ const PublicReport: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">处理中</p>
-                <p className="text-2xl font-bold text-purple-600 mt-1">
-                  {reports.filter(r => r.status === 'processing').length}
-                </p>
+                <p className="text-2xl font-bold text-purple-600 mt-1">{stats.processing}</p>
               </div>
               <div className="p-3 rounded-xl bg-purple-100 text-purple-600">
                 <FileText size={24} />
@@ -103,9 +144,7 @@ const PublicReport: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">已完成</p>
-                <p className="text-2xl font-bold text-emerald-600 mt-1">
-                  {reports.filter(r => r.status === 'completed').length}
-                </p>
+                <p className="text-2xl font-bold text-emerald-600 mt-1">{stats.completed}</p>
               </div>
               <div className="p-3 rounded-xl bg-emerald-100 text-emerald-600">
                 <Check size={24} />
@@ -118,9 +157,7 @@ const PublicReport: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">已合并</p>
-                <p className="text-2xl font-bold text-gray-600 mt-1">
-                  {reports.filter(r => r.status === 'merged').length}
-                </p>
+                <p className="text-2xl font-bold text-gray-600 mt-1">{stats.merged}</p>
               </div>
               <div className="p-3 rounded-xl bg-gray-100 text-gray-600">
                 <Merge size={24} />
@@ -177,9 +214,14 @@ const PublicReport: React.FC = () => {
                       <MessageSquare size={24} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-wrap">
                         <h3 className="font-semibold text-gray-900">{report.title}</h3>
                         <StatusTag status={report.status} type="report" />
+                        {report.status === 'merged' && report.mergedInto && (
+                          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                            合并至：{getMergedTargetTitle(report.mergedInto)}
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1 text-sm text-gray-500 line-clamp-2">{report.description}</p>
                       <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-500">
@@ -202,21 +244,19 @@ const PublicReport: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 ml-4">
+                  <div className="flex items-center gap-2 ml-4" onClick={(e) => e.stopPropagation()}>
                     {report.status === 'pending' && (
                       <>
-                        <Button size="sm" variant="success" onClick={(e) => { e.stopPropagation(); }}>
+                        <Button size="sm" variant="success" onClick={() => handleApprove(report.id)}>
                           <Check size={14} className="mr-1" /> 通过
                         </Button>
-                        <Button size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); }}>
+                        <Button size="sm" variant="danger" onClick={() => handleReject(report.id)}>
                           <X size={14} className="mr-1" /> 驳回
                         </Button>
+                        <Button size="sm" variant="secondary" onClick={(e) => handleOpenMerge(report.id, e)}>
+                          <Merge size={14} className="mr-1" /> 合并
+                        </Button>
                       </>
-                    )}
-                    {report.status === 'pending' && (
-                      <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); }}>
-                        <Merge size={14} className="mr-1" /> 合并
-                      </Button>
                     )}
                   </div>
                 </div>
@@ -226,7 +266,7 @@ const PublicReport: React.FC = () => {
         </CardContent>
       </Card>
 
-      {showDetailModal && selectedReport && (
+      {showDetailModal && currentReport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-xl">
             <div className="flex items-center justify-between p-6 border-b border-gray-100">
@@ -244,14 +284,21 @@ const PublicReport: React.FC = () => {
                   <MessageSquare size={32} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">{selectedReport.title}</h3>
-                  <StatusTag status={selectedReport.status} type="report" />
+                  <h3 className="text-lg font-semibold text-gray-900">{currentReport.title}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <StatusTag status={currentReport.status} type="report" />
+                    {currentReport.status === 'merged' && currentReport.mergedInto && (
+                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                        合并至：{getMergedTargetTitle(currentReport.mergedInto)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
               <div>
                 <p className="text-sm text-gray-500 mb-2">问题描述</p>
-                <p className="text-gray-700 bg-gray-50 p-4 rounded-xl">{selectedReport.description}</p>
+                <p className="text-gray-700 bg-gray-50 p-4 rounded-xl">{currentReport.description}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-6">
@@ -259,21 +306,21 @@ const PublicReport: React.FC = () => {
                   <p className="text-sm text-gray-500 mb-1 flex items-center gap-1">
                     <User size={14} /> 上报人
                   </p>
-                  <p className="font-medium text-gray-900">{selectedReport.reporterName}</p>
+                  <p className="font-medium text-gray-900">{currentReport.reporterName}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500 mb-1 flex items-center gap-1">
                     <Phone size={14} /> 联系电话
                   </p>
-                  <p className="font-medium text-gray-900">{selectedReport.reporterPhone}</p>
+                  <p className="font-medium text-gray-900">{currentReport.reporterPhone}</p>
                 </div>
                 <div className="col-span-2">
                   <p className="text-sm text-gray-500 mb-1 flex items-center gap-1">
                     <MapPin size={14} /> 位置
                   </p>
-                  <p className="font-medium text-gray-900">{selectedReport.location.address}</p>
+                  <p className="font-medium text-gray-900">{currentReport.location.address}</p>
                   <p className="text-sm text-gray-500 mt-1">
-                    {selectedReport.location.latitude}, {selectedReport.location.longitude}
+                    {currentReport.location.latitude}, {currentReport.location.longitude}
                   </p>
                 </div>
               </div>
@@ -291,9 +338,11 @@ const PublicReport: React.FC = () => {
               <div>
                 <p className="text-sm text-gray-500 mb-2">照片凭证</p>
                 <div className="grid grid-cols-4 gap-3">
-                  {selectedReport.photos.length > 0 ? (
-                    selectedReport.photos.map((photo, i) => (
-                      <div key={i} className="aspect-square rounded-xl bg-gray-100" />
+                  {currentReport.photos.length > 0 ? (
+                    currentReport.photos.map((photo, i) => (
+                      <div key={i} className="aspect-square rounded-xl bg-gray-100 overflow-hidden">
+                        <img src={photo} alt="" className="w-full h-full object-cover" />
+                      </div>
                     ))
                   ) : (
                     <p className="col-span-4 text-center text-gray-400 py-8">暂无照片</p>
@@ -302,20 +351,53 @@ const PublicReport: React.FC = () => {
               </div>
 
               <div className="flex justify-between text-sm text-gray-500">
-                <span>上报时间：{formatDateTime(selectedReport.createdAt)}</span>
-                {selectedReport.relatedTaskId && (
-                  <span>关联任务：{selectedReport.relatedTaskId}</span>
+                <span>上报时间：{formatDateTime(currentReport.createdAt)}</span>
+                {currentReport.relatedTaskId && (
+                  <span>关联任务：{currentReport.relatedTaskId}</span>
                 )}
               </div>
             </div>
             <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
               <Button variant="secondary" onClick={() => setShowDetailModal(false)}>关闭</Button>
-              {selectedReport.status === 'pending' && (
+              {currentReport.status === 'pending' && (
                 <>
-                  <Button variant="danger">驳回</Button>
-                  <Button>派发任务</Button>
+                  <Button variant="danger" onClick={() => { handleReject(currentReport.id); setShowDetailModal(false); }}>驳回</Button>
+                  <Button onClick={() => { handleApprove(currentReport.id); setShowDetailModal(false); }}>通过</Button>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMergeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">合并线索</h2>
+              <button
+                onClick={() => { setShowMergeModal(false); setMergeSource(null); }}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600">选择要合并到的目标线索：</p>
+              <select
+                value={mergeTarget}
+                onChange={(e) => setMergeTarget(e.target.value)}
+                className="w-full h-11 rounded-lg border border-gray-200 bg-white px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="">请选择目标线索</option>
+                {availableMergeTargets.map((r) => (
+                  <option key={r.id} value={r.id}>{r.title}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
+              <Button variant="secondary" onClick={() => { setShowMergeModal(false); setMergeSource(null); }}>取消</Button>
+              <Button onClick={handleConfirmMerge} disabled={!mergeTarget}>确认合并</Button>
             </div>
           </div>
         </div>
@@ -324,4 +406,4 @@ const PublicReport: React.FC = () => {
   );
 };
 
-export default PublicReport;
+export default PublicReportPage;
