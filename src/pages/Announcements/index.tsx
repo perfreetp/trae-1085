@@ -12,6 +12,7 @@ import {
   Edit,
   Trash2,
   Send,
+  RotateCcw,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -21,12 +22,19 @@ import type { Announcement } from '@/types';
 import { getAnnouncementTypeName, formatDate, formatDateTime } from '@/utils/helpers';
 
 const AnnouncementsPage: React.FC = () => {
-  const { announcements, addAnnouncement, publishAnnouncement, deleteAnnouncement } = useAppStore();
+  const { announcements, addAnnouncement, publishAnnouncement, deleteAnnouncement, updateAnnouncement, withdrawAnnouncement } = useAppStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
   const [showPublishModal, setShowPublishModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({
+    id: '',
+    title: '',
+    type: 'notice' as 'notice' | 'warning' | 'policy',
+    content: '',
+  });
   const [publishForm, setPublishForm] = useState({
     title: '',
     type: 'notice' as 'notice' | 'warning' | 'policy',
@@ -87,6 +95,37 @@ const AnnouncementsPage: React.FC = () => {
     e.stopPropagation();
     if (confirm('确定要删除这条公告吗？')) {
       deleteAnnouncement(id);
+    }
+  };
+
+  const handleOpenEditModal = (announcement: Announcement, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditForm({
+      id: announcement.id,
+      title: announcement.title,
+      type: announcement.type,
+      content: announcement.content,
+    });
+    setShowEditModal(true);
+    setShowDetailModal(false);
+  };
+
+  const handleSaveEdit = () => {
+    if (editForm.title && editForm.content) {
+      updateAnnouncement(editForm.id, {
+        title: editForm.title,
+        type: editForm.type,
+        content: editForm.content,
+      });
+      setShowEditModal(false);
+    }
+  };
+
+  const handleWithdraw = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (confirm('确定要撤回这条公告吗？撤回后将变为草稿状态。')) {
+      withdrawAnnouncement(id);
+      setShowDetailModal(false);
     }
   };
 
@@ -219,7 +258,9 @@ const AnnouncementsPage: React.FC = () => {
                         </span>
                         <span className="flex items-center gap-1">
                           <Calendar size={14} />
-                          {announcement.publishTime ? formatDate(announcement.publishTime) : '未发布'}
+                          {announcement.status === 'published' && announcement.publishTime
+                            ? formatDate(announcement.publishTime)
+                            : '草稿'}
                         </span>
                         <span className="flex items-center gap-1">
                           <Eye size={14} />
@@ -230,15 +271,20 @@ const AnnouncementsPage: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-1 ml-4" onClick={(e) => e.stopPropagation()}>
                     {announcement.status === 'draft' && (
-                      <Button size="sm" onClick={() => handlePublishDraft(announcement.id)}>
-                        <Send size={14} className="mr-1" /> 发布
+                      <>
+                        <Button size="sm" variant="secondary" onClick={(e) => handleOpenEditModal(announcement, e)}>
+                          <Edit size={14} className="mr-1" /> 编辑
+                        </Button>
+                        <Button size="sm" onClick={() => handlePublishDraft(announcement.id)}>
+                          <Send size={14} className="mr-1" /> 发布
+                        </Button>
+                      </>
+                    )}
+                    {announcement.status === 'published' && (
+                      <Button size="sm" variant="secondary" onClick={(e) => handleWithdraw(announcement.id, e)}>
+                        <RotateCcw size={14} className="mr-1" /> 撤回
                       </Button>
                     )}
-                    <button
-                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                    >
-                      <Edit size={18} />
-                    </button>
                     <button
                       className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                       onClick={(e) => handleDelete(announcement.id, e)}
@@ -289,7 +335,7 @@ const AnnouncementsPage: React.FC = () => {
                   </span>
                   <span className="flex items-center gap-1">
                     <Calendar size={14} />
-                    {currentAnnouncement.publishTime
+                    {currentAnnouncement.status === 'published' && currentAnnouncement.publishTime
                       ? formatDateTime(currentAnnouncement.publishTime)
                       : `创建于 ${formatDateTime(currentAnnouncement.createdAt)}`
                     }
@@ -315,8 +361,77 @@ const AnnouncementsPage: React.FC = () => {
             <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
               <Button variant="secondary" onClick={() => setShowDetailModal(false)}>关闭</Button>
               {currentAnnouncement.status === 'draft' && (
-                <Button onClick={() => handlePublishDraft(currentAnnouncement.id)}>立即发布</Button>
+                <>
+                  <Button variant="secondary" onClick={() => handleOpenEditModal(currentAnnouncement)}>
+                    <Edit size={16} className="mr-2" />
+                    编辑
+                  </Button>
+                  <Button onClick={() => handlePublishDraft(currentAnnouncement.id)}>立即发布</Button>
+                </>
               )}
+              {currentAnnouncement.status === 'published' && (
+                <Button variant="secondary" onClick={() => handleWithdraw(currentAnnouncement.id)}>
+                  <RotateCcw size={16} className="mr-2" />
+                  撤回
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-xl">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">编辑公告</h2>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">公告标题</label>
+                <input
+                  type="text"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm(p => ({ ...p, title: e.target.value }))}
+                  placeholder="请输入公告标题"
+                  className="w-full h-11 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">公告类型</label>
+                <select
+                  value={editForm.type}
+                  onChange={(e) => setEditForm(p => ({ ...p, type: e.target.value as 'notice' | 'warning' | 'policy' }))}
+                  className="w-full h-11 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="notice">通知公告</option>
+                  <option value="warning">预警提示</option>
+                  <option value="policy">政策法规</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">公告内容</label>
+                <textarea
+                  value={editForm.content}
+                  onChange={(e) => setEditForm(p => ({ ...p, content: e.target.value }))}
+                  rows={8}
+                  placeholder="请输入公告内容..."
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
+              <Button variant="secondary" onClick={() => setShowEditModal(false)}>取消</Button>
+              <Button onClick={handleSaveEdit} disabled={!editForm.title || !editForm.content}>
+                <Edit size={16} className="mr-2" />
+                保存修改
+              </Button>
             </div>
           </div>
         </div>

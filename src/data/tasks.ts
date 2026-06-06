@@ -77,6 +77,16 @@ export const mockRectificationNotices: RectificationNotice[] = [
     status: 'issued',
     issueTime: '2026-06-05T10:00:00Z',
     photos: [],
+    flowRecords: [
+      {
+        id: 'f1',
+        action: 'issue',
+        actionName: '下发整改通知',
+        operator: '管理员',
+        operateTime: '2026-06-05T10:00:00Z',
+        remark: '经核查发现超高问题，下发整改通知',
+      },
+    ],
   },
   {
     id: '2',
@@ -92,6 +102,24 @@ export const mockRectificationNotices: RectificationNotice[] = [
     issueTime: '2026-05-28T14:00:00Z',
     rectificationTime: '2026-06-01T09:00:00Z',
     photos: [],
+    flowRecords: [
+      {
+        id: 'f2',
+        action: 'issue',
+        actionName: '下发整改通知',
+        operator: '管理员',
+        operateTime: '2026-05-28T14:00:00Z',
+        remark: '发现安全隐患，下发整改通知',
+      },
+      {
+        id: 'f3',
+        action: 'receive',
+        actionName: '确认接收',
+        operator: '李总',
+        operateTime: '2026-06-01T09:00:00Z',
+        remark: '已收到通知，立即安排整改',
+      },
+    ],
   },
   {
     id: '3',
@@ -109,5 +137,31 @@ export const mockRectificationNotices: RectificationNotice[] = [
     recheckTime: '2026-06-06T09:00:00Z',
     recheckResult: '整改基本完成，需补充完善航空标识',
     photos: [],
+    flowRecords: [
+      {
+        id: 'f4',
+        action: 'issue',
+        actionName: '下发整改通知',
+        operator: '管理员',
+        operateTime: '2026-05-20T10:00:00Z',
+        remark: '超高预警，下发整改通知',
+      },
+      {
+        id: 'f5',
+        action: 'receive',
+        actionName: '确认接收',
+        operator: '赵总',
+        operateTime: '2026-05-21T09:00:00Z',
+        remark: '已接收，安排评估和整改',
+      },
+      {
+        id: 'f6',
+        action: 'request_recheck',
+        actionName: '申请复查',
+        operator: '赵总',
+        operateTime: '2026-06-05T15:00:00Z',
+        remark: '整改完成，申请复查',
+      },
+    ],
   },
 ];

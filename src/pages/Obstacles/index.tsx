@@ -14,22 +14,29 @@ import {
   Upload,
   Image,
   Check,
+  Download,
+  FileUp,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatusTag } from '@/components/common/StatusTag';
 import { useAppStore } from '@/store/useAppStore';
 import type { Obstacle } from '@/types';
-import { getObstacleTypeName, formatDate, formatDateTime, getRiskLevelName } from '@/utils/helpers';
+import { getObstacleTypeName, formatDate, formatDateTime, getRiskLevelName, getStatusName } from '@/utils/helpers';
 
 const Obstacles: React.FC = () => {
-  const { obstacles, addObstacle, updateObstacle, deleteObstacle } = useAppStore();
+  const { obstacles, addObstacle, updateObstacle, deleteObstacle, batchAddObstacles } = useAppStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [previewData, setPreviewData] = useState<Omit<Obstacle, 'id' | 'createdAt' | 'updatedAt'>[]>([]);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [selectedObstacle, setSelectedObstacle] = useState<Obstacle | null>(null);
   const [formData, setFormData] = useState<Partial<Obstacle>>({
     name: '',
@@ -126,6 +133,92 @@ const Obstacles: React.FC = () => {
     setSelectedObstacle(obstacle);
     setFormData({ ...obstacle });
     setShowEditModal(true);
+  };
+
+  const handleExport = () => {
+    const headers = ['名称', '类型', '高度', '地址', '责任单位', '状态', '风险等级', '登记时间'];
+    const rows = filteredObstacles.map((o) => [
+      o.name,
+      getObstacleTypeName(o.type),
+      `${o.height}m`,
+      o.address,
+      o.ownerUnit || '',
+      getStatusName(o.status),
+      getRiskLevelName(o.riskLevel),
+      formatDate(o.createdAt),
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(',')),
+    ].join('\n');
+
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const date = new Date();
+    const dateStr = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
+    link.download = `障碍物台账_${dateStr}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const parseImportData = (text: string) => {
+    const lines = text.trim().split('\n').filter((line) => line.trim());
+    const validTypes = ['tower_crane', 'billboard', 'building', 'other'];
+    const validRiskLevels = ['low', 'medium', 'high'];
+    const parsed: Omit<Obstacle, 'id' | 'createdAt' | 'updatedAt'>[] = [];
+
+    for (const line of lines) {
+      const parts = line.split(',').map((p) => p.trim());
+      if (parts.length < 8) continue;
+
+      const [name, type, height, address, ownerUnit, contactPerson, contactPhone, riskLevel] = parts;
+      if (!name || !address) continue;
+      if (!validTypes.includes(type)) continue;
+      if (!validRiskLevels.includes(riskLevel)) continue;
+
+      const heightNum = Number(height);
+      if (isNaN(heightNum)) continue;
+
+      parsed.push({
+        name,
+        type: type as Obstacle['type'],
+        height: heightNum,
+        address,
+        ownerUnit,
+        contactPerson,
+        contactPhone,
+        riskLevel: riskLevel as Obstacle['riskLevel'],
+        isTemporary: false,
+        status: 'normal',
+        latitude: 31.2304,
+        longitude: 121.4737,
+        photos: [],
+      });
+    }
+
+    return parsed;
+  };
+
+  const handleImportTextChange = (text: string) => {
+    setImportText(text);
+    setPreviewData(parseImportData(text));
+  };
+
+  const handleBatchImport = () => {
+    if (previewData.length === 0) return;
+    batchAddObstacles(previewData);
+    setShowImportModal(false);
+    setImportText('');
+    setPreviewData([]);
+    setSuccessMessage(`成功导入 ${previewData.length} 条障碍物记录`);
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 3000);
   };
 
   const renderPhotoUpload = () => (
@@ -311,15 +404,32 @@ const Obstacles: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {showSuccess && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 bg-green-50 border border-green-200 text-green-700 rounded-lg shadow-lg">
+          <Check size={18} />
+          <span className="text-sm font-medium">{successMessage}</span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">障碍物台账</h1>
           <p className="mt-1 text-sm text-gray-500">管理低空障碍物信息，包括塔吊、广告牌、建筑等</p>
         </div>
-        <Button onClick={() => { resetForm(); setShowAddModal(true); }}>
-          <Plus size={18} className="mr-2" />
-          登记障碍物
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" onClick={handleExport}>
+            <Download size={18} className="mr-2" />
+            导出
+          </Button>
+          <Button variant="secondary" onClick={() => setShowImportModal(true)}>
+            <FileUp size={18} className="mr-2" />
+            批量导入
+          </Button>
+          <Button onClick={() => { resetForm(); setShowAddModal(true); }}>
+            <Plus size={18} className="mr-2" />
+            登记障碍物
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -593,6 +703,89 @@ const Obstacles: React.FC = () => {
             <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
               <Button variant="secondary" onClick={() => { setShowDetailModal(false); setSelectedObstacle(null); }}>关闭</Button>
               <Button onClick={() => { setShowDetailModal(false); handleOpenEdit(selectedObstacle); }}>编辑信息</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-xl">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-xl font-bold text-gray-900">批量导入障碍物</h2>
+              <button
+                onClick={() => { setShowImportModal(false); setImportText(''); setPreviewData([]); }}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">数据格式说明</label>
+                <div className="p-4 bg-gray-50 rounded-lg text-sm text-gray-600 space-y-2">
+                  <p>每行一条数据，字段用逗号分隔，顺序如下：</p>
+                  <p className="font-mono">名称,类型,高度,地址,责任单位,联系人,联系电话,风险等级</p>
+                  <p>类型可选值：tower_crane(塔吊), billboard(广告牌), building(建筑), other(其他)</p>
+                  <p>风险等级可选值：low(低风险), medium(中风险), high(高风险)</p>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">粘贴数据</label>
+                <textarea
+                  value={importText}
+                  onChange={(e) => handleImportTextChange(e.target.value)}
+                  rows={8}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-mono"
+                  placeholder="示例：
+塔吊1,tower_crane,50,北京市朝阳区建国路88号,城建集团,张三,13800138000,high
+广告牌1,billboard,15,北京市海淀区中关村大街,广告公司,李四,13900139000,medium"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    数据预览 <span className="text-gray-500 font-normal">({previewData.length} 条有效数据)</span>
+                  </label>
+                </div>
+                <div className="border border-gray-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                  {previewData.length > 0 ? (
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 sticky top-0">
+                        <tr>
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">名称</th>
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">类型</th>
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">高度</th>
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">地址</th>
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">风险等级</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {previewData.map((item, index) => (
+                          <tr key={index}>
+                            <td className="py-2 px-3 text-gray-900">{item.name}</td>
+                            <td className="py-2 px-3 text-gray-600">{getObstacleTypeName(item.type)}</td>
+                            <td className="py-2 px-3 text-gray-600">{item.height}m</td>
+                            <td className="py-2 px-3 text-gray-600 max-w-xs truncate">{item.address}</td>
+                            <td className="py-2 px-3"><StatusTag status={item.riskLevel} type="risk" /></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="py-8 text-center text-gray-400">
+                      <FileUp size={32} className="mx-auto mb-2" />
+                      <p className="text-sm">粘贴数据后将在此处显示预览</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
+              <Button variant="secondary" onClick={() => { setShowImportModal(false); setImportText(''); setPreviewData([]); }}>取消</Button>
+              <Button onClick={handleBatchImport} disabled={previewData.length === 0}>
+                确认导入
+              </Button>
             </div>
           </div>
         </div>

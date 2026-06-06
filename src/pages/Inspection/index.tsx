@@ -12,6 +12,9 @@ import {
   X,
   Eye,
   Send,
+  Filter,
+  RefreshCw,
+  History,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -29,6 +32,7 @@ const Inspection: React.FC = () => {
     requestRecheck,
     passRecheck,
     returnRectification,
+    currentUser,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<'warnings' | 'rectifications'>('warnings');
@@ -43,17 +47,57 @@ const Inspection: React.FC = () => {
   });
   const [recheckResult, setRecheckResult] = useState('');
   const [showRecheckModal, setShowRecheckModal] = useState(false);
+  const [returnReason, setReturnReason] = useState('');
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [receiveRemark, setReceiveRemark] = useState('');
+  const [showReceiveModal, setShowReceiveModal] = useState(false);
+  const [recheckRemark, setRecheckRemark] = useState('');
+  const [showRecheckRequestModal, setShowRecheckRequestModal] = useState(false);
+
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [unitFilter, setUnitFilter] = useState<string>('');
+  const [deadlineStart, setDeadlineStart] = useState<string>('');
+  const [deadlineEnd, setDeadlineEnd] = useState<string>('');
+  const [showOverdueOnly, setShowOverdueOnly] = useState(false);
 
   const overheightObstacles = useMemo(() =>
     obstacles.filter(o => o.status === 'overheight' || o.status === 'warning'),
   [obstacles]);
+
+  const isOverdue = (notice: RectificationNotice): boolean => {
+    const deadline = new Date(notice.deadline);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return deadline < now && notice.status !== 'completed';
+  };
 
   const stats = useMemo(() => ({
     overheight: obstacles.filter(o => o.status === 'overheight').length,
     warning: obstacles.filter(o => o.status === 'warning').length,
     rectifying: rectificationNotices.filter(n => n.status === 'rectifying' || n.status === 'issued').length,
     completed: rectificationNotices.filter(n => n.status === 'completed').length,
+    overdue: rectificationNotices.filter(n => isOverdue(n)).length,
   }), [obstacles, rectificationNotices]);
+
+  const responsibleUnits = useMemo(() => {
+    const units = new Set(rectificationNotices.map(n => n.responsibleUnit));
+    return Array.from(units);
+  }, [rectificationNotices]);
+
+  const filteredNotices = useMemo(() => {
+    return rectificationNotices.filter(notice => {
+      if (showOverdueOnly && !isOverdue(notice)) return false;
+      if (statusFilter && notice.status !== statusFilter) return false;
+      if (unitFilter && notice.responsibleUnit !== unitFilter) return false;
+      if (deadlineStart && new Date(notice.deadline) < new Date(deadlineStart)) return false;
+      if (deadlineEnd) {
+        const end = new Date(deadlineEnd);
+        end.setHours(23, 59, 59, 999);
+        if (new Date(notice.deadline) > end) return false;
+      }
+      return true;
+    });
+  }, [rectificationNotices, statusFilter, unitFilter, deadlineStart, deadlineEnd, showOverdueOnly]);
 
   const currentNotice = useMemo(() =>
     selectedNotice ? rectificationNotices.find(n => n.id === selectedNotice.id) || null : null,
@@ -96,12 +140,36 @@ const Inspection: React.FC = () => {
     }
   };
 
-  const handleConfirmReceive = (id: string) => {
-    confirmReceive(id);
+  const handleOpenReceiveModal = (notice: RectificationNotice, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedNotice(notice);
+    setReceiveRemark('');
+    setShowReceiveModal(true);
   };
 
-  const handleRequestRecheck = (id: string) => {
-    requestRecheck(id);
+  const handleConfirmReceive = () => {
+    if (selectedNotice && currentUser) {
+      confirmReceive(selectedNotice.id, currentUser.name, receiveRemark);
+      setShowReceiveModal(false);
+      setSelectedNotice(null);
+      setReceiveRemark('');
+    }
+  };
+
+  const handleOpenRecheckRequestModal = (notice: RectificationNotice, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedNotice(notice);
+    setRecheckRemark('');
+    setShowRecheckRequestModal(true);
+  };
+
+  const handleRequestRecheck = () => {
+    if (selectedNotice && currentUser) {
+      requestRecheck(selectedNotice.id, currentUser.name, recheckRemark);
+      setShowRecheckRequestModal(false);
+      setSelectedNotice(null);
+      setRecheckRemark('');
+    }
   };
 
   const handleOpenRecheckModal = (notice: RectificationNotice, e: React.MouseEvent) => {
@@ -112,8 +180,8 @@ const Inspection: React.FC = () => {
   };
 
   const handlePassRecheck = () => {
-    if (selectedNotice && recheckResult) {
-      passRecheck(selectedNotice.id, recheckResult);
+    if (selectedNotice && recheckResult && currentUser) {
+      passRecheck(selectedNotice.id, recheckResult, currentUser.name);
       setShowRecheckModal(false);
       setShowDetailModal(false);
       setSelectedNotice(null);
@@ -121,8 +189,29 @@ const Inspection: React.FC = () => {
     }
   };
 
-  const handleReturnRectification = (id: string) => {
-    returnRectification(id);
+  const handleOpenReturnModal = (notice: RectificationNotice, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedNotice(notice);
+    setReturnReason('');
+    setShowReturnModal(true);
+  };
+
+  const handleReturnRectification = () => {
+    if (selectedNotice && returnReason && currentUser) {
+      returnRectification(selectedNotice.id, returnReason, currentUser.name);
+      setShowReturnModal(false);
+      setShowDetailModal(false);
+      setSelectedNotice(null);
+      setReturnReason('');
+    }
+  };
+
+  const handleResetFilters = () => {
+    setStatusFilter('');
+    setUnitFilter('');
+    setDeadlineStart('');
+    setDeadlineEnd('');
+    setShowOverdueOnly(false);
   };
 
   return (
@@ -134,7 +223,7 @@ const Inspection: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
@@ -170,6 +259,19 @@ const Inspection: React.FC = () => {
               </div>
               <div className="p-3 rounded-xl bg-blue-100 text-blue-600">
                 <FileCheck size={24} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">逾期整改</p>
+                <p className="text-2xl font-bold text-red-600 mt-1">{stats.overdue}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-red-100 text-red-600">
+                <AlertTriangle size={24} />
               </div>
             </div>
           </CardContent>
@@ -289,68 +391,153 @@ const Inspection: React.FC = () => {
 
           {activeTab === 'rectifications' && (
             <div className="space-y-4">
-              {rectificationNotices.map((notice) => (
-                <div
-                  key={notice.id}
-                  className="p-5 rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-sm transition-all cursor-pointer"
-                  onClick={() => handleViewDetail(notice)}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-4 flex-1">
-                      <div className={`p-3 rounded-xl ${
-                        notice.status === 'completed' ? 'bg-emerald-100 text-emerald-600' :
-                        notice.status === 'overdue' ? 'bg-red-100 text-red-600' :
-                        'bg-blue-100 text-blue-600'
-                      }`}>
-                        <FileCheck size={24} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <h3 className="font-semibold text-gray-900">{notice.title}</h3>
-                          <StatusTag status={notice.status} type="rectification" />
-                        </div>
-                        <p className="mt-1 text-sm text-gray-500 line-clamp-2">{notice.content}</p>
-                        <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-500">
-                          <span className="flex items-center gap-1">
-                            <Building2 size={14} />
-                            {notice.obstacleName}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <User size={14} />
-                            {notice.responsibleUnit}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Calendar size={14} />
-                            截止：{formatDate(notice.deadline)}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock size={14} />
-                            下发：{formatDate(notice.issueTime)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 ml-4" onClick={(e) => e.stopPropagation()}>
-                      {notice.status === 'issued' && (
-                        <Button size="sm" onClick={() => handleConfirmReceive(notice.id)}>
-                          确认接收
-                        </Button>
-                      )}
-                      {notice.status === 'rectifying' && (
-                        <Button size="sm" onClick={() => handleRequestRecheck(notice.id)}>
-                          申请复查
-                        </Button>
-                      )}
-                      {notice.status === 'rechecking' && (
-                        <Button size="sm" variant="success" onClick={(e) => handleOpenRecheckModal(notice, e)}>
-                          <Check size={14} className="mr-1" /> 通过销号
-                        </Button>
-                      )}
-                    </div>
+              <div className="p-4 bg-gray-50 rounded-xl space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Filter size={18} className="text-gray-500" />
+                  <span className="font-medium text-gray-700">筛选条件</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">状态</label>
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    >
+                      <option value="">全部状态</option>
+                      <option value="issued">已下发</option>
+                      <option value="rectifying">整改中</option>
+                      <option value="rechecking">复查中</option>
+                      <option value="completed">已完成</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">责任单位</label>
+                    <select
+                      value={unitFilter}
+                      onChange={(e) => setUnitFilter(e.target.value)}
+                      className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    >
+                      <option value="">全部单位</option>
+                      {responsibleUnits.map(unit => (
+                        <option key={unit} value={unit}>{unit}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">截止日期起</label>
+                    <input
+                      type="date"
+                      value={deadlineStart}
+                      onChange={(e) => setDeadlineStart(e.target.value)}
+                      className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">截止日期止</label>
+                    <input
+                      type="date"
+                      value={deadlineEnd}
+                      onChange={(e) => setDeadlineEnd(e.target.value)}
+                      className="w-full h-10 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <Button
+                      variant={showOverdueOnly ? 'danger' : 'secondary'}
+                      onClick={() => setShowOverdueOnly(!showOverdueOnly)}
+                      className="flex-1"
+                    >
+                      <AlertTriangle size={14} className="mr-1" />
+                      {showOverdueOnly ? '取消筛选' : '一键查看逾期'}
+                    </Button>
+                    <Button variant="secondary" onClick={handleResetFilters}>
+                      <RefreshCw size={14} />
+                    </Button>
                   </div>
                 </div>
-              ))}
-              {rectificationNotices.length === 0 && (
+              </div>
+
+              {filteredNotices.map((notice) => {
+                const overdue = isOverdue(notice);
+                return (
+                  <div
+                    key={notice.id}
+                    className={`p-5 rounded-xl border hover:shadow-sm transition-all cursor-pointer ${
+                      overdue
+                        ? 'border-red-200 bg-red-50/50'
+                        : 'border-gray-100 hover:border-blue-200'
+                    }`}
+                    onClick={() => handleViewDetail(notice)}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-4 flex-1">
+                        <div className={`p-3 rounded-xl ${
+                          notice.status === 'completed' ? 'bg-emerald-100 text-emerald-600' :
+                          overdue ? 'bg-red-100 text-red-600' :
+                          'bg-blue-100 text-blue-600'
+                        }`}>
+                          <FileCheck size={24} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <h3 className="font-semibold text-gray-900">{notice.title}</h3>
+                            <StatusTag status={overdue ? 'overdue' : notice.status} type="rectification" />
+                            {overdue && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">
+                                <AlertTriangle size={12} className="mr-1" />
+                                已逾期
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-1 text-sm text-gray-500 line-clamp-2">{notice.content}</p>
+                          <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-500">
+                            <span className="flex items-center gap-1">
+                              <Building2 size={14} />
+                              {notice.obstacleName}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <User size={14} />
+                              {notice.responsibleUnit}
+                            </span>
+                            <span className={`flex items-center gap-1 ${overdue ? 'text-red-600 font-medium' : ''}`}>
+                              <Calendar size={14} />
+                              截止：{formatDate(notice.deadline)}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Clock size={14} />
+                              下发：{formatDate(notice.issueTime)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 ml-4" onClick={(e) => e.stopPropagation()}>
+                        {notice.status === 'issued' && (
+                          <Button size="sm" onClick={(e) => handleOpenReceiveModal(notice, e)}>
+                            确认接收
+                          </Button>
+                        )}
+                        {notice.status === 'rectifying' && (
+                          <Button size="sm" onClick={(e) => handleOpenRecheckRequestModal(notice, e)}>
+                            申请复查
+                          </Button>
+                        )}
+                        {notice.status === 'rechecking' && (
+                          <>
+                            <Button size="sm" variant="danger" onClick={(e) => handleOpenReturnModal(notice, e)}>
+                              退回整改
+                            </Button>
+                            <Button size="sm" variant="success" onClick={(e) => handleOpenRecheckModal(notice, e)}>
+                              <Check size={14} className="mr-1" /> 通过销号
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredNotices.length === 0 && (
                 <div className="text-center py-12 text-gray-400">
                   <FileCheck size={48} className="mx-auto mb-4 opacity-50" />
                   <p>暂无整改通知记录</p>
@@ -375,12 +562,24 @@ const Inspection: React.FC = () => {
             </div>
             <div className="p-6 space-y-6">
               <div className="flex items-center gap-4">
-                <div className="p-4 rounded-xl bg-blue-100 text-blue-600">
+                <div className={`p-4 rounded-xl ${
+                  currentNotice.status === 'completed' ? 'bg-emerald-100 text-emerald-600' :
+                  isOverdue(currentNotice) ? 'bg-red-100 text-red-600' :
+                  'bg-blue-100 text-blue-600'
+                }`}>
                   <FileCheck size={32} />
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">{currentNotice.title}</h3>
-                  <StatusTag status={currentNotice.status} type="rectification" />
+                  <div className="flex items-center gap-2 mt-1">
+                    <StatusTag status={isOverdue(currentNotice) ? 'overdue' : currentNotice.status} type="rectification" />
+                    {isOverdue(currentNotice) && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">
+                        <AlertTriangle size={12} className="mr-1" />
+                        已逾期
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -414,7 +613,7 @@ const Inspection: React.FC = () => {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500 mb-1">整改截止</p>
-                  <p className={`font-medium ${currentNotice.status === 'overdue' ? 'text-red-600' : 'text-gray-900'}`}>
+                  <p className={`font-medium ${isOverdue(currentNotice) ? 'text-red-600' : 'text-gray-900'}`}>
                     {formatDate(currentNotice.deadline)}
                   </p>
                 </div>
@@ -430,7 +629,24 @@ const Inspection: React.FC = () => {
                     <p className="font-medium text-gray-900">{formatDateTime(currentNotice.recheckTime)}</p>
                   </div>
                 )}
+                {currentNotice.returnTime && (
+                  <>
+                    <div>
+                      <p className="text-sm text-gray-500 mb-1">退回时间</p>
+                      <p className="font-medium text-red-600">{formatDateTime(currentNotice.returnTime)}</p>
+                    </div>
+                  </>
+                )}
               </div>
+
+              {currentNotice.returnReason && (
+                <div>
+                  <p className="text-sm text-gray-500 mb-2">退回原因</p>
+                  <div className="bg-red-50 p-4 rounded-xl border border-red-200">
+                    <p className="text-red-700">{currentNotice.returnReason}</p>
+                  </div>
+                </div>
+              )}
 
               {currentNotice.recheckResult && (
                 <div>
@@ -440,12 +656,47 @@ const Inspection: React.FC = () => {
                   </div>
                 </div>
               )}
+
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <History size={18} className="text-gray-500" />
+                  <p className="font-medium text-gray-700">流转时间线</p>
+                </div>
+                <div className="relative">
+                  {currentNotice.flowRecords.map((record, index) => (
+                    <div key={record.id} className="flex gap-4 pb-6 last:pb-0">
+                      <div className="flex flex-col items-center">
+                        <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                          index === 0 ? 'bg-blue-500' :
+                          index === currentNotice.flowRecords.length - 1 ? 'bg-emerald-500' :
+                          'bg-gray-400'
+                        }`} />
+                        {index < currentNotice.flowRecords.length - 1 && (
+                          <div className="w-0.5 flex-1 bg-gray-200 mt-1" />
+                        )}
+                      </div>
+                      <div className="flex-1 pb-0">
+                        <div className="flex items-center justify-between">
+                          <p className="font-medium text-gray-900">{record.actionName}</p>
+                          <span className="text-xs text-gray-500">{formatDateTime(record.operateTime)}</span>
+                        </div>
+                        <p className="text-sm text-gray-500 mt-1">操作人：{record.operator}</p>
+                        {record.remark && (
+                          <p className="text-sm text-gray-600 mt-1 bg-gray-50 p-2 rounded-lg">
+                            {record.remark}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
             <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
               <Button variant="secondary" onClick={() => setShowDetailModal(false)}>关闭</Button>
               {currentNotice.status === 'rechecking' && (
                 <>
-                  <Button variant="danger" onClick={() => { handleReturnRectification(currentNotice.id); setShowDetailModal(false); }}>退回整改</Button>
+                  <Button variant="danger" onClick={(e) => handleOpenReturnModal(currentNotice, e as any)}>退回整改</Button>
                   <Button variant="success" onClick={() => { setShowRecheckModal(true); }}>通过销号</Button>
                 </>
               )}
@@ -534,10 +785,118 @@ const Inspection: React.FC = () => {
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
                 />
               </div>
+              <p className="text-sm text-gray-500">
+                操作人：<span className="font-medium text-gray-700">{currentUser?.name}</span>
+              </p>
             </div>
             <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
               <Button variant="secondary" onClick={() => { setShowRecheckModal(false); setRecheckResult(''); }}>取消</Button>
               <Button variant="success" onClick={handlePassRecheck} disabled={!recheckResult}>确认通过</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReturnModal && selectedNotice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">退回整改</h2>
+              <button
+                onClick={() => { setShowReturnModal(false); setReturnReason(''); }}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">退回原因</label>
+                <textarea
+                  value={returnReason}
+                  onChange={(e) => setReturnReason(e.target.value)}
+                  rows={4}
+                  placeholder="请填写退回原因说明..."
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 resize-none"
+                />
+              </div>
+              <p className="text-sm text-gray-500">
+                操作人：<span className="font-medium text-gray-700">{currentUser?.name}</span>
+              </p>
+            </div>
+            <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
+              <Button variant="secondary" onClick={() => { setShowReturnModal(false); setReturnReason(''); }}>取消</Button>
+              <Button variant="danger" onClick={handleReturnRectification} disabled={!returnReason}>确认退回</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReceiveModal && selectedNotice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">确认接收</h2>
+              <button
+                onClick={() => { setShowReceiveModal(false); setReceiveRemark(''); }}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">备注（可选）</label>
+                <textarea
+                  value={receiveRemark}
+                  onChange={(e) => setReceiveRemark(e.target.value)}
+                  rows={3}
+                  placeholder="请填写接收备注..."
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+                />
+              </div>
+              <p className="text-sm text-gray-500">
+                操作人：<span className="font-medium text-gray-700">{currentUser?.name}</span>
+              </p>
+            </div>
+            <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
+              <Button variant="secondary" onClick={() => { setShowReceiveModal(false); setReceiveRemark(''); }}>取消</Button>
+              <Button onClick={handleConfirmReceive}>确认接收</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRecheckRequestModal && selectedNotice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">申请复查</h2>
+              <button
+                onClick={() => { setShowRecheckRequestModal(false); setRecheckRemark(''); }}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">备注（可选）</label>
+                <textarea
+                  value={recheckRemark}
+                  onChange={(e) => setRecheckRemark(e.target.value)}
+                  rows={3}
+                  placeholder="请填写整改说明..."
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+                />
+              </div>
+              <p className="text-sm text-gray-500">
+                操作人：<span className="font-medium text-gray-700">{currentUser?.name}</span>
+              </p>
+            </div>
+            <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
+              <Button variant="secondary" onClick={() => { setShowRecheckRequestModal(false); setRecheckRemark(''); }}>取消</Button>
+              <Button onClick={handleRequestRecheck}>申请复查</Button>
             </div>
           </div>
         </div>

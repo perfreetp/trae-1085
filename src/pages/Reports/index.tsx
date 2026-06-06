@@ -28,6 +28,7 @@ import {
   Calendar,
   Filter,
   FileText,
+  Building2,
 } from 'lucide-react';
 import {
   obstacleTypeData,
@@ -35,9 +36,19 @@ import {
 } from '@/data/reports';
 
 type TimeRange = 'month' | 'quarter' | 'year';
+type UnitDimension = 'all' | 'byUnit';
+
+interface UnitStat {
+  name: string;
+  obstacles: number;
+  notices: number;
+  overdue: number;
+  completionRate: number;
+}
 
 const Reports = () => {
   const [timeRange, setTimeRange] = useState<TimeRange>('month');
+  const [unitDimension, setUnitDimension] = useState<UnitDimension>('all');
 
   const statisticsByTimeRange = useMemo(() => {
     const base = {
@@ -201,6 +212,66 @@ const Reports = () => {
     }
   }, [timeRange]);
 
+  const unitStatsData = useMemo((): UnitStat[] => {
+    const baseUnits = [
+      { name: '城东街道办事处' },
+      { name: '城西街道办事处' },
+      { name: '城南街道办事处' },
+      { name: '城北街道办事处' },
+      { name: '开发区管委会' },
+      { name: '交通运输局' },
+    ];
+
+    switch (timeRange) {
+      case 'month':
+        return [
+          { name: baseUnits[0].name, obstacles: 32, notices: 18, overdue: 3, completionRate: 82.5 },
+          { name: baseUnits[1].name, obstacles: 28, notices: 15, overdue: 2, completionRate: 88.3 },
+          { name: baseUnits[2].name, obstacles: 25, notices: 12, overdue: 1, completionRate: 91.7 },
+          { name: baseUnits[3].name, obstacles: 30, notices: 16, overdue: 4, completionRate: 76.2 },
+          { name: baseUnits[4].name, obstacles: 22, notices: 10, overdue: 0, completionRate: 95.8 },
+          { name: baseUnits[5].name, obstacles: 19, notices: 8, overdue: 2, completionRate: 84.6 },
+        ];
+      case 'quarter':
+        return [
+          { name: baseUnits[0].name, obstacles: 95, notices: 52, overdue: 8, completionRate: 85.2 },
+          { name: baseUnits[1].name, obstacles: 82, notices: 45, overdue: 5, completionRate: 90.1 },
+          { name: baseUnits[2].name, obstacles: 75, notices: 38, overdue: 3, completionRate: 93.5 },
+          { name: baseUnits[3].name, obstacles: 88, notices: 48, overdue: 10, completionRate: 79.6 },
+          { name: baseUnits[4].name, obstacles: 65, notices: 32, overdue: 2, completionRate: 96.3 },
+          { name: baseUnits[5].name, obstacles: 58, notices: 28, overdue: 4, completionRate: 87.9 },
+        ];
+      case 'year':
+        return [
+          { name: baseUnits[0].name, obstacles: 380, notices: 210, overdue: 25, completionRate: 87.6 },
+          { name: baseUnits[1].name, obstacles: 325, notices: 180, overdue: 18, completionRate: 91.2 },
+          { name: baseUnits[2].name, obstacles: 298, notices: 165, overdue: 12, completionRate: 94.5 },
+          { name: baseUnits[3].name, obstacles: 350, notices: 195, overdue: 32, completionRate: 82.8 },
+          { name: baseUnits[4].name, obstacles: 260, notices: 140, overdue: 8, completionRate: 96.9 },
+          { name: baseUnits[5].name, obstacles: 235, notices: 125, overdue: 15, completionRate: 89.7 },
+        ];
+      default:
+        return [];
+    }
+  }, [timeRange]);
+
+  const unitBarChartData = useMemo(() => {
+    return unitStatsData.map((item) => ({
+      name: item.name,
+      障碍物数量: item.obstacles,
+    }));
+  }, [unitStatsData]);
+
+  const unitSummary = useMemo(() => {
+    const totalObstacles = unitStatsData.reduce((sum, item) => sum + item.obstacles, 0);
+    const totalNotices = unitStatsData.reduce((sum, item) => sum + item.notices, 0);
+    const totalOverdue = unitStatsData.reduce((sum, item) => sum + item.overdue, 0);
+    const avgCompletionRate = unitStatsData.length > 0
+      ? (unitStatsData.reduce((sum, item) => sum + item.completionRate, 0) / unitStatsData.length).toFixed(1)
+      : '0';
+    return { totalObstacles, totalNotices, totalOverdue, avgCompletionRate };
+  }, [unitStatsData]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -236,277 +307,426 @@ const Reports = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="障碍物总数"
-          value={statisticsByTimeRange.totalObstacles}
-          icon={<BarChart3 className="w-5 h-5" />}
-          trend={{ value: 12, isUp: true }}
-          color="blue"
-        />
-        <StatCard
-          title="任务完成率"
-          value={`${statisticsByTimeRange.taskCompletionRate}%`}
-          icon={<CheckCircle className="w-5 h-5" />}
-          trend={{ value: 5.2, isUp: true }}
-          color="green"
-        />
-        <StatCard
-          title="超高预警"
-          value={statisticsByTimeRange.overheightWarnings}
-          icon={<AlertTriangle className="w-5 h-5" />}
-          trend={{ value: 2, isUp: false }}
-          color="amber"
-        />
-        <StatCard
-          title="上报处理率"
-          value={`${statisticsByTimeRange.reportProcessingRate}%`}
-          icon={<TrendingUp className="w-5 h-5" />}
-          trend={{ value: 3.8, isUp: true }}
-          color="purple"
-        />
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-medium text-slate-600">责任单位维度：</span>
+        <div className="flex bg-slate-100 rounded-lg p-1">
+          {[
+            { key: 'all', label: '全部' },
+            { key: 'byUnit', label: '按单位查看' },
+          ].map((item) => (
+            <Button
+              key={item.key}
+              variant={unitDimension === item.key ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setUnitDimension(item.key as UnitDimension)}
+            >
+              {item.label}
+            </Button>
+          ))}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-blue-600" />
-                {trendTitle}
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={320}>
-              <LineChart data={trendDataByTimeRange}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                <XAxis dataKey="name" stroke="#94A3B8" fontSize={12} />
-                <YAxis stroke="#94A3B8" fontSize={12} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#fff',
-                    border: '1px solid #E2E8F0',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                  }}
-                />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="obstacles"
-                  name="障碍物"
-                  stroke="#2563EB"
-                  strokeWidth={2}
-                  dot={{ fill: '#2563EB', strokeWidth: 2 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="tasks"
-                  name="巡查任务"
-                  stroke="#10B981"
-                  strokeWidth={2}
-                  dot={{ fill: '#10B981', strokeWidth: 2 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="reports"
-                  name="群众上报"
-                  stroke="#F59E0B"
-                  strokeWidth={2}
-                  dot={{ fill: '#F59E0B', strokeWidth: 2 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      {unitDimension === 'all' ? (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard
+              title="障碍物总数"
+              value={statisticsByTimeRange.totalObstacles}
+              icon={<BarChart3 className="w-5 h-5" />}
+              trend={{ value: 12, isUp: true }}
+              color="blue"
+            />
+            <StatCard
+              title="任务完成率"
+              value={`${statisticsByTimeRange.taskCompletionRate}%`}
+              icon={<CheckCircle className="w-5 h-5" />}
+              trend={{ value: 5.2, isUp: true }}
+              color="green"
+            />
+            <StatCard
+              title="超高预警"
+              value={statisticsByTimeRange.overheightWarnings}
+              icon={<AlertTriangle className="w-5 h-5" />}
+              trend={{ value: 2, isUp: false }}
+              color="amber"
+            />
+            <StatCard
+              title="上报处理率"
+              value={`${statisticsByTimeRange.reportProcessingRate}%`}
+              icon={<TrendingUp className="w-5 h-5" />}
+              trend={{ value: 3.8, isUp: true }}
+              color="purple"
+            />
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-emerald-600" />
-                任务完成情况
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={taskCompletionData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                <XAxis dataKey="name" stroke="#94A3B8" fontSize={12} />
-                <YAxis stroke="#94A3B8" fontSize={12} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#fff',
-                    border: '1px solid #E2E8F0',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                  }}
-                />
-                <Legend />
-                <Bar dataKey="completed" name="已完成" fill="#10B981" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="total" name="总任务" fill="#93C5FD" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-blue-600" />
+                    {trendTitle}
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={320}>
+                  <LineChart data={trendDataByTimeRange}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                    <XAxis dataKey="name" stroke="#94A3B8" fontSize={12} />
+                    <YAxis stroke="#94A3B8" fontSize={12} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#fff',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                      }}
+                    />
+                    <Legend />
+                    <Line
+                      type="monotone"
+                      dataKey="obstacles"
+                      name="障碍物"
+                      stroke="#2563EB"
+                      strokeWidth={2}
+                      dot={{ fill: '#2563EB', strokeWidth: 2 }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="tasks"
+                      name="巡查任务"
+                      stroke="#10B981"
+                      strokeWidth={2}
+                      dot={{ fill: '#10B981', strokeWidth: 2 }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="reports"
+                      name="群众上报"
+                      stroke="#F59E0B"
+                      strokeWidth={2}
+                      dot={{ fill: '#F59E0B', strokeWidth: 2 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>障碍物类型分布</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={240}>
-              <PieChart>
-                <Pie
-                  data={obstacleTypeData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={2}
-                  dataKey="value"
-                >
-                  {obstacleTypeData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend
-                  verticalAlign="bottom"
-                  height={36}
-                  formatter={(value) => <span className="text-sm text-slate-600">{value}</span>}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-emerald-600" />
+                    任务完成情况
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart data={taskCompletionData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                    <XAxis dataKey="name" stroke="#94A3B8" fontSize={12} />
+                    <YAxis stroke="#94A3B8" fontSize={12} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#fff',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                      }}
+                    />
+                    <Legend />
+                    <Bar dataKey="completed" name="已完成" fill="#10B981" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="total" name="总任务" fill="#93C5FD" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>风险等级分布</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={240}>
-              <PieChart>
-                <Pie
-                  data={riskLevelData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={2}
-                  dataKey="value"
-                >
-                  {riskLevelData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend
-                  verticalAlign="bottom"
-                  height={36}
-                  formatter={(value) => <span className="text-sm text-slate-600">{value}</span>}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>障碍物类型分布</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={240}>
+                  <PieChart>
+                    <Pie
+                      data={obstacleTypeData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={80}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {obstacleTypeData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend
+                      verticalAlign="bottom"
+                      height={36}
+                      formatter={(value) => <span className="text-sm text-slate-600">{value}</span>}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>快速统计</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
-              <div>
-                <p className="text-sm text-slate-600">{newObstaclesLabel}</p>
-                <p className="text-2xl font-bold text-blue-600">{quickStats.newObstacles}</p>
-              </div>
-              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                <BarChart3 className="w-5 h-5 text-blue-600" />
-              </div>
-            </div>
-            <div className="flex justify-between items-center p-3 bg-emerald-50 rounded-lg">
-              <div>
-                <p className="text-sm text-slate-600">待处理任务</p>
-                <p className="text-2xl font-bold text-emerald-600">{quickStats.pendingTasks}</p>
-              </div>
-              <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
-                <CheckCircle className="w-5 h-5 text-emerald-600" />
-              </div>
-            </div>
-            <div className="flex justify-between items-center p-3 bg-amber-50 rounded-lg">
-              <div>
-                <p className="text-sm text-slate-600">超高预警数</p>
-                <p className="text-2xl font-bold text-amber-600">{quickStats.warnings}</p>
-              </div>
-              <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5 text-amber-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>风险等级分布</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={240}>
+                  <PieChart>
+                    <Pie
+                      data={riskLevelData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={80}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {riskLevelData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend
+                      verticalAlign="bottom"
+                      height={36}
+                      formatter={(value) => <span className="text-sm text-slate-600">{value}</span>}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-indigo-600" />
-              综合趋势一览
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={areaTrendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-              <XAxis dataKey="name" stroke="#94A3B8" fontSize={12} />
-              <YAxis stroke="#94A3B8" fontSize={12} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#fff',
-                  border: '1px solid #E2E8F0',
-                  borderRadius: '8px',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                }}
-              />
-              <Legend />
-              <Area
-                type="monotone"
-                dataKey="obstacles"
-                name="障碍物"
-                stackId="1"
-                stroke="#2563EB"
-                fill="#93C5FD"
-                fillOpacity={0.6}
-              />
-              <Area
-                type="monotone"
-                dataKey="tasks"
-                name="巡查任务"
-                stackId="1"
-                stroke="#10B981"
-                fill="#6EE7B7"
-                fillOpacity={0.6}
-              />
-              <Area
-                type="monotone"
-                dataKey="reports"
-                name="群众上报"
-                stackId="1"
-                stroke="#F59E0B"
-                fill="#FCD34D"
-                fillOpacity={0.6}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>快速统计</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
+                  <div>
+                    <p className="text-sm text-slate-600">{newObstaclesLabel}</p>
+                    <p className="text-2xl font-bold text-blue-600">{quickStats.newObstacles}</p>
+                  </div>
+                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                    <BarChart3 className="w-5 h-5 text-blue-600" />
+                  </div>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-emerald-50 rounded-lg">
+                  <div>
+                    <p className="text-sm text-slate-600">待处理任务</p>
+                    <p className="text-2xl font-bold text-emerald-600">{quickStats.pendingTasks}</p>
+                  </div>
+                  <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
+                    <CheckCircle className="w-5 h-5 text-emerald-600" />
+                  </div>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-amber-50 rounded-lg">
+                  <div>
+                    <p className="text-sm text-slate-600">超高预警数</p>
+                    <p className="text-2xl font-bold text-amber-600">{quickStats.warnings}</p>
+                  </div>
+                  <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+                    <AlertTriangle className="w-5 h-5 text-amber-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-indigo-600" />
+                  综合趋势一览
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={areaTrendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                  <XAxis dataKey="name" stroke="#94A3B8" fontSize={12} />
+                  <YAxis stroke="#94A3B8" fontSize={12} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#fff',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                    }}
+                  />
+                  <Legend />
+                  <Area
+                    type="monotone"
+                    dataKey="obstacles"
+                    name="障碍物"
+                    stackId="1"
+                    stroke="#2563EB"
+                    fill="#93C5FD"
+                    fillOpacity={0.6}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="tasks"
+                    name="巡查任务"
+                    stackId="1"
+                    stroke="#10B981"
+                    fill="#6EE7B7"
+                    fillOpacity={0.6}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="reports"
+                    name="群众上报"
+                    stackId="1"
+                    stroke="#F59E0B"
+                    fill="#FCD34D"
+                    fillOpacity={0.6}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard
+              title="责任单位数"
+              value={unitStatsData.length}
+              icon={<Building2 className="w-5 h-5" />}
+              trend={{ value: 0, isUp: true }}
+              color="blue"
+            />
+            <StatCard
+              title="障碍物总数"
+              value={unitSummary.totalObstacles}
+              icon={<BarChart3 className="w-5 h-5" />}
+              trend={{ value: 8, isUp: true }}
+              color="purple"
+            />
+            <StatCard
+              title="整改通知总数"
+              value={unitSummary.totalNotices}
+              icon={<FileText className="w-5 h-5" />}
+              trend={{ value: 5, isUp: true }}
+              color="amber"
+            />
+            <StatCard
+              title="平均完成率"
+              value={`${unitSummary.avgCompletionRate}%`}
+              icon={<CheckCircle className="w-5 h-5" />}
+              trend={{ value: 3.2, isUp: true }}
+              color="green"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <div className="flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-blue-600" />
+                    责任单位障碍物数量对比
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={350}>
+                  <BarChart data={unitBarChartData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                    <XAxis type="number" stroke="#94A3B8" fontSize={12} />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
+                      stroke="#94A3B8"
+                      fontSize={12}
+                      width={120}
+                      tick={{ fontSize: 12 }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#fff',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                      }}
+                    />
+                    <Bar
+                      dataKey="障碍物数量"
+                      fill="#2563EB"
+                      radius={[0, 4, 4, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-5 h-5 text-emerald-600" />
+                    责任单位统计详情
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200">
+                        <th className="text-left py-3 px-2 font-medium text-slate-600">责任单位</th>
+                        <th className="text-center py-3 px-2 font-medium text-slate-600">障碍物</th>
+                        <th className="text-center py-3 px-2 font-medium text-slate-600">整改通知</th>
+                        <th className="text-center py-3 px-2 font-medium text-slate-600">逾期</th>
+                        <th className="text-center py-3 px-2 font-medium text-slate-600">完成率</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {unitStatsData.map((unit, index) => (
+                        <tr key={index} className="border-b border-slate-100 hover:bg-slate-50">
+                          <td className="py-3 px-2 font-medium text-slate-900">{unit.name}</td>
+                          <td className="py-3 px-2 text-center text-slate-700">{unit.obstacles}</td>
+                          <td className="py-3 px-2 text-center text-slate-700">{unit.notices}</td>
+                          <td className="py-3 px-2 text-center">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              unit.overdue > 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                            }`}>
+                              {unit.overdue}
+                            </span>
+                          </td>
+                          <td className="py-3 px-2 text-center">
+                            <span className={`font-medium ${
+                              unit.completionRate >= 90 ? 'text-green-600' :
+                              unit.completionRate >= 80 ? 'text-blue-600' :
+                              'text-amber-600'
+                            }`}>
+                              {unit.completionRate}%
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
     </div>
   );
 };

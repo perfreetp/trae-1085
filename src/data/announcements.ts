@@ -11,6 +11,7 @@ export const mockAnnouncements: Announcement[] = [
     author: '净空管理办公室',
     views: 256,
     createdAt: '2026-05-30T14:30:00Z',
+    updatedAt: '2026-06-01T10:00:00Z',
   },
   {
     id: '2',
@@ -22,6 +23,7 @@ export const mockAnnouncements: Announcement[] = [
     author: '应急管理科',
     views: 512,
     createdAt: '2026-06-03T15:00:00Z',
+    updatedAt: '2026-06-03T16:00:00Z',
   },
   {
     id: '3',
@@ -33,6 +35,7 @@ export const mockAnnouncements: Announcement[] = [
     author: '市政府法制办',
     views: 1024,
     createdAt: '2025-12-25T10:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
   },
   {
     id: '4',
@@ -43,5 +46,6 @@ export const mockAnnouncements: Announcement[] = [
     author: '净空管理办公室',
     views: 0,
     createdAt: '2026-06-05T11:00:00Z',
+    updatedAt: '2026-06-05T11:00:00Z',
   },
 ];

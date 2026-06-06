@@ -7,11 +7,13 @@ import type {
   PublicReport,
   RectificationNotice,
   Announcement,
+  FlowRecord,
 } from '@/types';
 import { mockObstacles } from '@/data/obstacles';
 import { mockPatrolTasks, mockRectificationNotices } from '@/data/tasks';
 import { mockPublicReports } from '@/data/reports';
 import { mockAnnouncements } from '@/data/announcements';
+import { generateId } from '@/utils/helpers';
 
 interface AppState {
   sidebarCollapsed: boolean;
@@ -27,12 +29,14 @@ interface AppState {
   addObstacle: (obstacle: Omit<Obstacle, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateObstacle: (id: string, data: Partial<Obstacle>) => void;
   deleteObstacle: (id: string) => void;
+  batchAddObstacles: (obstacles: Omit<Obstacle, 'id' | 'createdAt' | 'updatedAt'>[]) => void;
 
   patrolTasks: PatrolTask[];
   addPatrolTask: (task: Omit<PatrolTask, 'id' | 'createdAt' | 'progress'>) => void;
   updatePatrolTask: (id: string, data: Partial<PatrolTask>) => void;
   startTask: (id: string) => void;
   checkRoutePoint: (taskId: string, pointId: string, photos?: string[], remark?: string) => void;
+  createTaskFromReport: (reportId: string, assignee: string, startTime: string) => string;
 
   publicReports: PublicReport[];
   updatePublicReport: (id: string, data: Partial<PublicReport>) => void;
@@ -41,17 +45,19 @@ interface AppState {
   mergeReport: (sourceId: string, targetId: string) => void;
 
   rectificationNotices: RectificationNotice[];
-  addRectificationNotice: (notice: Omit<RectificationNotice, 'id'>) => void;
+  addRectificationNotice: (notice: Omit<RectificationNotice, 'id' | 'flowRecords'>) => void;
   updateRectificationNotice: (id: string, data: Partial<RectificationNotice>) => void;
-  confirmReceive: (id: string) => void;
-  requestRecheck: (id: string) => void;
-  passRecheck: (id: string, result: string) => void;
-  returnRectification: (id: string) => void;
+  confirmReceive: (id: string, operator: string, remark?: string) => void;
+  requestRecheck: (id: string, operator: string, remark?: string) => void;
+  passRecheck: (id: string, result: string, operator: string) => void;
+  returnRectification: (id: string, reason: string, operator: string) => void;
+  addFlowRecord: (noticeId: string, record: Omit<FlowRecord, 'id'>) => void;
 
   announcements: Announcement[];
-  addAnnouncement: (announcement: Omit<Announcement, 'id' | 'createdAt' | 'views'>) => void;
+  addAnnouncement: (announcement: Omit<Announcement, 'id' | 'createdAt' | 'views' | 'updatedAt'>) => void;
   updateAnnouncement: (id: string, data: Partial<Announcement>) => void;
   publishAnnouncement: (id: string) => void;
+  withdrawAnnouncement: (id: string) => void;
   deleteAnnouncement: (id: string) => void;
 }
 
@@ -136,6 +142,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       obstacles: state.obstacles.filter((o) => o.id !== id),
     })),
+  batchAddObstacles: (obstacles) =>
+    set((state) => {
+      const now = new Date().toISOString();
+      const newObstacles = obstacles.map((o, index) => ({
+        ...o,
+        id: Date.now().toString() + index,
+        createdAt: now,
+        updatedAt: now,
+      }));
+      return { obstacles: [...newObstacles, ...state.obstacles] };
+    }),
 
   patrolTasks: [...mockPatrolTasks],
   addPatrolTask: (task) =>
@@ -185,6 +202,43 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
       return { patrolTasks: tasks };
     }),
+  createTaskFromReport: (reportId, assignee, startTime) => {
+    const report = get().publicReports.find((r) => r.id === reportId);
+    if (!report) return '';
+    
+    const taskId = Date.now().toString();
+    const newTask: PatrolTask = {
+      id: taskId,
+      title: report.title,
+      type: 'special',
+      status: 'pending',
+      assignee,
+      routePoints: [
+        {
+          id: generateId(),
+          name: report.location.address,
+          latitude: report.location.latitude,
+          longitude: report.location.longitude,
+          order: 1,
+          checked: false,
+        },
+      ],
+      startTime,
+      progress: 0,
+      description: report.description,
+      sourceReportId: reportId,
+      createdAt: new Date().toISOString(),
+    };
+    
+    set((state) => ({
+      patrolTasks: [newTask, ...state.patrolTasks],
+      publicReports: state.publicReports.map((r) =>
+        r.id === reportId ? { ...r, relatedTaskId: taskId, status: 'processing' as const } : r
+      ),
+    }));
+    
+    return taskId;
+  },
 
   publicReports: [...mockPublicReports],
   updatePublicReport: (id, data) =>
@@ -214,45 +268,145 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   rectificationNotices: [...mockRectificationNotices],
   addRectificationNotice: (notice) =>
-    set((state) => ({
-      rectificationNotices: [
-        {
-          ...notice,
-          id: Date.now().toString(),
-        },
-        ...state.rectificationNotices,
-      ],
-    })),
+    set((state) => {
+      const now = new Date().toISOString();
+      const newNotice: RectificationNotice = {
+        ...notice,
+        id: Date.now().toString(),
+        flowRecords: [
+          {
+            id: generateId(),
+            action: 'issue',
+            actionName: '下发整改通知',
+            operator: '管理员',
+            operateTime: now,
+            remark: '系统自动下发',
+          },
+        ],
+      };
+      return { rectificationNotices: [newNotice, ...state.rectificationNotices] };
+    }),
   updateRectificationNotice: (id, data) =>
     set((state) => ({
       rectificationNotices: state.rectificationNotices.map((n) =>
         n.id === id ? { ...n, ...data } : n
       ),
     })),
-  confirmReceive: (id) =>
+  addFlowRecord: (noticeId, record) =>
     set((state) => ({
       rectificationNotices: state.rectificationNotices.map((n) =>
-        n.id === id ? { ...n, status: 'rectifying' as const, rectificationTime: new Date().toISOString() } : n
+        n.id === noticeId
+          ? {
+              ...n,
+              flowRecords: [
+                ...n.flowRecords,
+                { ...record, id: generateId() },
+              ],
+            }
+          : n
       ),
     })),
-  requestRecheck: (id) =>
+  confirmReceive: (id, operator, remark) => {
+    const now = new Date().toISOString();
     set((state) => ({
       rectificationNotices: state.rectificationNotices.map((n) =>
-        n.id === id ? { ...n, status: 'rechecking' as const, recheckTime: new Date().toISOString() } : n
+        n.id === id
+          ? {
+              ...n,
+              status: 'rectifying' as const,
+              rectificationTime: now,
+              flowRecords: [
+                ...n.flowRecords,
+                {
+                  id: generateId(),
+                  action: 'receive',
+                  actionName: '确认接收',
+                  operator,
+                  operateTime: now,
+                  remark,
+                },
+              ],
+            }
+          : n
       ),
-    })),
-  passRecheck: (id, result) =>
+    }));
+  },
+  requestRecheck: (id, operator, remark) => {
+    const now = new Date().toISOString();
     set((state) => ({
       rectificationNotices: state.rectificationNotices.map((n) =>
-        n.id === id ? { ...n, status: 'completed' as const, recheckResult: result } : n
+        n.id === id
+          ? {
+              ...n,
+              status: 'rechecking' as const,
+              recheckTime: now,
+              flowRecords: [
+                ...n.flowRecords,
+                {
+                  id: generateId(),
+                  action: 'request_recheck',
+                  actionName: '申请复查',
+                  operator,
+                  operateTime: now,
+                  remark,
+                },
+              ],
+            }
+          : n
       ),
-    })),
-  returnRectification: (id) =>
+    }));
+  },
+  passRecheck: (id, result, operator) => {
+    const now = new Date().toISOString();
     set((state) => ({
       rectificationNotices: state.rectificationNotices.map((n) =>
-        n.id === id ? { ...n, status: 'rectifying' as const } : n
+        n.id === id
+          ? {
+              ...n,
+              status: 'completed' as const,
+              recheckResult: result,
+              flowRecords: [
+                ...n.flowRecords,
+                {
+                  id: generateId(),
+                  action: 'pass',
+                  actionName: '通过销号',
+                  operator,
+                  operateTime: now,
+                  remark: result,
+                },
+              ],
+            }
+          : n
       ),
-    })),
+    }));
+  },
+  returnRectification: (id, reason, operator) => {
+    const now = new Date().toISOString();
+    set((state) => ({
+      rectificationNotices: state.rectificationNotices.map((n) =>
+        n.id === id
+          ? {
+              ...n,
+              status: 'rectifying' as const,
+              returnReason: reason,
+              returnTime: now,
+              flowRecords: [
+                ...n.flowRecords,
+                {
+                  id: generateId(),
+                  action: 'return',
+                  actionName: '退回整改',
+                  operator,
+                  operateTime: now,
+                  remark: reason,
+                },
+              ],
+            }
+          : n
+      ),
+    }));
+  },
 
   announcements: [...mockAnnouncements],
   addAnnouncement: (announcement) =>
@@ -262,6 +416,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           ...announcement,
           id: Date.now().toString(),
           createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
           views: 0,
         },
         ...state.announcements,
@@ -270,13 +425,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateAnnouncement: (id, data) =>
     set((state) => ({
       announcements: state.announcements.map((a) =>
-        a.id === id ? { ...a, ...data } : a
+        a.id === id ? { ...a, ...data, updatedAt: new Date().toISOString() } : a
       ),
     })),
   publishAnnouncement: (id) =>
     set((state) => ({
       announcements: state.announcements.map((a) =>
-        a.id === id ? { ...a, status: 'published' as const, publishTime: new Date().toISOString(), views: 0 } : a
+        a.id === id ? { ...a, status: 'published' as const, publishTime: new Date().toISOString(), views: 0, updatedAt: new Date().toISOString() } : a
+      ),
+    })),
+  withdrawAnnouncement: (id) =>
+    set((state) => ({
+      announcements: state.announcements.map((a) =>
+        a.id === id ? { ...a, status: 'draft' as const, publishTime: undefined, updatedAt: new Date().toISOString() } : a
       ),
     })),
   deleteAnnouncement: (id) =>

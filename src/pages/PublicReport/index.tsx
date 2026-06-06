@@ -11,16 +11,18 @@ import {
   Merge,
   Eye,
   FileText,
+  ClipboardList,
+  Calendar,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatusTag } from '@/components/common/StatusTag';
 import { useAppStore } from '@/store/useAppStore';
-import type { PublicReport } from '@/types';
+import type { PublicReport, PatrolTask } from '@/types';
 import { formatDate, formatDateTime } from '@/utils/helpers';
 
 const PublicReportPage: React.FC = () => {
-  const { publicReports, approveReport, rejectReport, mergeReport } = useAppStore();
+  const { publicReports, patrolTasks, approveReport, rejectReport, mergeReport, createTaskFromReport } = useAppStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -28,6 +30,10 @@ const PublicReportPage: React.FC = () => {
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [mergeSource, setMergeSource] = useState<string | null>(null);
   const [mergeTarget, setMergeTarget] = useState<string>('');
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [taskSourceId, setTaskSourceId] = useState<string | null>(null);
+  const [taskAssignee, setTaskAssignee] = useState<string>('');
+  const [taskStartTime, setTaskStartTime] = useState<string>('');
 
   const stats = useMemo(() => ({
     pending: publicReports.filter(r => r.status === 'pending').length,
@@ -56,6 +62,12 @@ const PublicReportPage: React.FC = () => {
     selectedReport ? publicReports.find(r => r.id === selectedReport.id) || null : null,
   [publicReports, selectedReport]);
 
+  const getRelatedTask = (reportId: string) => {
+    const report = publicReports.find(r => r.id === reportId);
+    if (!report?.relatedTaskId) return null;
+    return patrolTasks.find(t => t.id === report.relatedTaskId) || null;
+  };
+
   const handleViewDetail = (report: PublicReport) => {
     setSelectedReport(report);
     setShowDetailModal(true);
@@ -82,6 +94,26 @@ const PublicReportPage: React.FC = () => {
       setShowMergeModal(false);
       setMergeSource(null);
       setMergeTarget('');
+    }
+  };
+
+  const handleOpenCreateTask = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTaskSourceId(id);
+    setTaskAssignee('');
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    setTaskStartTime(now.toISOString().slice(0, 16));
+    setShowTaskModal(true);
+  };
+
+  const handleConfirmCreateTask = () => {
+    if (taskSourceId && taskAssignee && taskStartTime) {
+      createTaskFromReport(taskSourceId, taskAssignee, new Date(taskStartTime).toISOString());
+      setShowTaskModal(false);
+      setTaskSourceId(null);
+      setTaskAssignee('');
+      setTaskStartTime('');
     }
   };
 
@@ -202,66 +234,80 @@ const PublicReportPage: React.FC = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {filteredReports.map((report) => (
-              <div
-                key={report.id}
-                className="p-5 rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-sm transition-all cursor-pointer"
-                onClick={() => handleViewDetail(report)}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-4 flex-1">
-                    <div className="p-3 rounded-xl bg-cyan-100 text-cyan-600">
-                      <MessageSquare size={24} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <h3 className="font-semibold text-gray-900">{report.title}</h3>
-                        <StatusTag status={report.status} type="report" />
-                        {report.status === 'merged' && report.mergedInto && (
-                          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                            合并至：{getMergedTargetTitle(report.mergedInto)}
+            {filteredReports.map((report) => {
+              const relatedTask = getRelatedTask(report.id);
+              return (
+                <div
+                  key={report.id}
+                  className="p-5 rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-sm transition-all cursor-pointer"
+                  onClick={() => handleViewDetail(report)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-4 flex-1">
+                      <div className="p-3 rounded-xl bg-cyan-100 text-cyan-600">
+                        <MessageSquare size={24} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <h3 className="font-semibold text-gray-900">{report.title}</h3>
+                          <StatusTag status={report.status} type="report" />
+                          {report.status === 'merged' && report.mergedInto && (
+                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                              合并至：{getMergedTargetTitle(report.mergedInto)}
+                            </span>
+                          )}
+                          {relatedTask && (
+                            <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded flex items-center gap-1">
+                              <ClipboardList size={12} />
+                              已关联任务
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-sm text-gray-500 line-clamp-2">{report.description}</p>
+                        <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-500">
+                          <span className="flex items-center gap-1">
+                            <User size={14} />
+                            {report.reporterName}
                           </span>
-                        )}
-                      </div>
-                      <p className="mt-1 text-sm text-gray-500 line-clamp-2">{report.description}</p>
-                      <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-500">
-                        <span className="flex items-center gap-1">
-                          <User size={14} />
-                          {report.reporterName}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Phone size={14} />
-                          {report.reporterPhone}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <MapPin size={14} />
-                          <span className="truncate max-w-xs">{report.location.address}</span>
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock size={14} />
-                          {formatDate(report.createdAt)}
-                        </span>
+                          <span className="flex items-center gap-1">
+                            <Phone size={14} />
+                            {report.reporterPhone}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <MapPin size={14} />
+                            <span className="truncate max-w-xs">{report.location.address}</span>
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock size={14} />
+                            {formatDate(report.createdAt)}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 ml-4" onClick={(e) => e.stopPropagation()}>
-                    {report.status === 'pending' && (
-                      <>
-                        <Button size="sm" variant="success" onClick={() => handleApprove(report.id)}>
-                          <Check size={14} className="mr-1" /> 通过
+                    <div className="flex items-center gap-2 ml-4" onClick={(e) => e.stopPropagation()}>
+                      {report.status === 'pending' && (
+                        <>
+                          <Button size="sm" variant="success" onClick={() => handleApprove(report.id)}>
+                            <Check size={14} className="mr-1" /> 通过
+                          </Button>
+                          <Button size="sm" variant="danger" onClick={() => handleReject(report.id)}>
+                            <X size={14} className="mr-1" /> 驳回
+                          </Button>
+                          <Button size="sm" variant="secondary" onClick={(e) => handleOpenMerge(report.id, e)}>
+                            <Merge size={14} className="mr-1" /> 合并
+                          </Button>
+                        </>
+                      )}
+                      {report.status === 'processing' && !relatedTask && (
+                        <Button size="sm" onClick={(e) => handleOpenCreateTask(report.id, e)}>
+                          <ClipboardList size={14} className="mr-1" /> 转巡查任务
                         </Button>
-                        <Button size="sm" variant="danger" onClick={() => handleReject(report.id)}>
-                          <X size={14} className="mr-1" /> 驳回
-                        </Button>
-                        <Button size="sm" variant="secondary" onClick={(e) => handleOpenMerge(report.id, e)}>
-                          <Merge size={14} className="mr-1" /> 合并
-                        </Button>
-                      </>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>
@@ -285,11 +331,17 @@ const PublicReportPage: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">{currentReport.title}</h3>
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <StatusTag status={currentReport.status} type="report" />
                     {currentReport.status === 'merged' && currentReport.mergedInto && (
                       <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
                         合并至：{getMergedTargetTitle(currentReport.mergedInto)}
+                      </span>
+                    )}
+                    {getRelatedTask(currentReport.id) && (
+                      <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded flex items-center gap-1">
+                        <ClipboardList size={12} />
+                        已关联任务
                       </span>
                     )}
                   </div>
@@ -350,11 +402,31 @@ const PublicReportPage: React.FC = () => {
                 </div>
               </div>
 
+              {getRelatedTask(currentReport.id) && (
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                  <p className="text-sm font-medium text-blue-900 mb-3 flex items-center gap-2">
+                    <ClipboardList size={16} />
+                    关联巡查任务
+                  </p>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-blue-700">任务名称</span>
+                      <span className="text-sm font-medium text-gray-900">{getRelatedTask(currentReport.id)?.title}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-blue-700">任务状态</span>
+                      <StatusTag status={getRelatedTask(currentReport.id)?.status || ''} type="task" />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-blue-700">执行人</span>
+                      <span className="text-sm font-medium text-gray-900">{getRelatedTask(currentReport.id)?.assignee}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="flex justify-between text-sm text-gray-500">
                 <span>上报时间：{formatDateTime(currentReport.createdAt)}</span>
-                {currentReport.relatedTaskId && (
-                  <span>关联任务：{currentReport.relatedTaskId}</span>
-                )}
               </div>
             </div>
             <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
@@ -364,6 +436,11 @@ const PublicReportPage: React.FC = () => {
                   <Button variant="danger" onClick={() => { handleReject(currentReport.id); setShowDetailModal(false); }}>驳回</Button>
                   <Button onClick={() => { handleApprove(currentReport.id); setShowDetailModal(false); }}>通过</Button>
                 </>
+              )}
+              {currentReport.status === 'processing' && !getRelatedTask(currentReport.id) && (
+                <Button onClick={() => { setShowDetailModal(false); handleOpenCreateTask(currentReport.id, { stopPropagation: () => {} } as React.MouseEvent); }}>
+                  转巡查任务
+                </Button>
               )}
             </div>
           </div>
@@ -398,6 +475,54 @@ const PublicReportPage: React.FC = () => {
             <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
               <Button variant="secondary" onClick={() => { setShowMergeModal(false); setMergeSource(null); }}>取消</Button>
               <Button onClick={handleConfirmMerge} disabled={!mergeTarget}>确认合并</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showTaskModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">转巡查任务</h2>
+              <button
+                onClick={() => { setShowTaskModal(false); setTaskSourceId(null); }}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="text-sm text-gray-600 mb-2 block flex items-center gap-1">
+                  <User size={14} /> 执行人
+                </label>
+                <select
+                  value={taskAssignee}
+                  onChange={(e) => setTaskAssignee(e.target.value)}
+                  className="w-full h-11 rounded-lg border border-gray-200 bg-white px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="">请选择执行人</option>
+                  <option value="张巡查">张巡查</option>
+                  <option value="李巡查">李巡查</option>
+                  <option value="王巡查">王巡查</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm text-gray-600 mb-2 block flex items-center gap-1">
+                  <Calendar size={14} /> 开始时间
+                </label>
+                <input
+                  type="datetime-local"
+                  value={taskStartTime}
+                  onChange={(e) => setTaskStartTime(e.target.value)}
+                  className="w-full h-11 rounded-lg border border-gray-200 bg-white px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
+              <Button variant="secondary" onClick={() => { setShowTaskModal(false); setTaskSourceId(null); }}>取消</Button>
+              <Button onClick={handleConfirmCreateTask} disabled={!taskAssignee || !taskStartTime}>确认生成</Button>
             </div>
           </div>
         </div>

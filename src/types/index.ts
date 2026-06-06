@@ -1,3 +1,12 @@
+export interface FlowRecord {
+  id: string;
+  action: 'issue' | 'receive' | 'request_recheck' | 'pass' | 'return' | 'create' | 'publish' | 'withdraw';
+  actionName: string;
+  operator: string;
+  operateTime: string;
+  remark?: string;
+}
+
 export interface Obstacle {
   id: string;
   name: string;
@@ -42,6 +51,7 @@ export interface PatrolTask {
   endTime?: string;
   progress: number;
   description: string;
+  sourceReportId?: string;
   createdAt: string;
 }
 
@@ -78,7 +88,10 @@ export interface RectificationNotice {
   rectificationTime?: string;
   recheckTime?: string;
   recheckResult?: string;
+  returnReason?: string;
+  returnTime?: string;
   photos: string[];
+  flowRecords: FlowRecord[];
 }
 
 export interface Announcement {
@@ -91,6 +104,7 @@ export interface Announcement {
   author: string;
   views: number;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface User {
@@ -116,6 +130,7 @@ export interface Statistics {
   overheightWarnings: number;
   taskCompletionRate: number;
   reportProcessingRate: number;
+  overdueNotices: number;
 }
 
 export interface RiskHotspot {
@@ -125,4 +140,12 @@ export interface RiskHotspot {
   longitude: number;
   riskCount: number;
   riskLevel: 'low' | 'medium' | 'high';
+}
+
+export interface UnitStats {
+  unitName: string;
+  obstacleCount: number;
+  rectificationCount: number;
+  overdueCount: number;
+  taskCompletionRate: number;
 }
