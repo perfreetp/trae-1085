@@ -97,6 +97,10 @@ export const mockStatistics: Statistics = {
   taskCompletionRate: 78.5,
   reportProcessingRate: 85.2,
   overdueNotices: 2,
+  pendingReports: 3,
+  pendingReceiveNotices: 1,
+  pendingRecheckNotices: 1,
+  totalTodos: 7,
 };
 
 export const monthlyTrendData = [

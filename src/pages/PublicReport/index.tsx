@@ -34,6 +34,8 @@ const PublicReportPage: React.FC = () => {
   const [taskSourceId, setTaskSourceId] = useState<string | null>(null);
   const [taskAssignee, setTaskAssignee] = useState<string>('');
   const [taskStartTime, setTaskStartTime] = useState<string>('');
+  const [showTaskDetail, setShowTaskDetail] = useState(false);
+  const [relatedTask, setRelatedTask] = useState<PatrolTask | null>(null);
 
   const stats = useMemo(() => ({
     pending: publicReports.filter(r => r.status === 'pending').length,
@@ -120,6 +122,11 @@ const PublicReportPage: React.FC = () => {
   const getMergedTargetTitle = (targetId: string) => {
     const target = publicReports.find(r => r.id === targetId);
     return target?.title || '未知线索';
+  };
+
+  const handleViewTaskDetail = (task: PatrolTask) => {
+    setRelatedTask(task);
+    setShowTaskDetail(true);
   };
 
   return (
@@ -403,23 +410,63 @@ const PublicReportPage: React.FC = () => {
               </div>
 
               {getRelatedTask(currentReport.id) && (
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-                  <p className="text-sm font-medium text-blue-900 mb-3 flex items-center gap-2">
-                    <ClipboardList size={16} />
-                    关联巡查任务
-                  </p>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-blue-700">任务名称</span>
-                      <span className="text-sm font-medium text-gray-900">{getRelatedTask(currentReport.id)?.title}</span>
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-sm font-medium text-blue-900 flex items-center gap-2">
+                      <ClipboardList size={16} />
+                      关联巡查任务
+                    </p>
+                    <Button size="sm" variant="secondary" onClick={() => handleViewTaskDetail(getRelatedTask(currentReport.id)!)}>
+                      <Eye size={14} className="mr-1" /> 查看关联任务
+                    </Button>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
+                        <ClipboardList size={20} />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-semibold text-gray-900">{getRelatedTask(currentReport.id)?.title}</h4>
+                          <StatusTag status={getRelatedTask(currentReport.id)?.status || ''} type="task" />
+                        </div>
+                        <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
+                          <User size={14} />
+                          执行人：{getRelatedTask(currentReport.id)?.assignee}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-blue-700">任务状态</span>
-                      <StatusTag status={getRelatedTask(currentReport.id)?.status || ''} type="task" />
+                    <div>
+                      <div className="flex justify-between text-xs text-gray-500 mb-1">
+                        <span>巡查进度</span>
+                        <span>{getRelatedTask(currentReport.id)?.progress}%</span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            getRelatedTask(currentReport.id)?.progress === 100 ? 'bg-emerald-500' : 'bg-blue-500'
+                          }`}
+                          style={{ width: `${getRelatedTask(currentReport.id)?.progress}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-blue-700">执行人</span>
-                      <span className="text-sm font-medium text-gray-900">{getRelatedTask(currentReport.id)?.assignee}</span>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-gray-500 mb-1 flex items-center gap-1">
+                          <Calendar size={14} />
+                          计划开始时间
+                        </p>
+                        <p className="font-medium text-gray-900">{formatDateTime(getRelatedTask(currentReport.id)?.startTime || '')}</p>
+                      </div>
+                      {getRelatedTask(currentReport.id)?.endTime && (
+                        <div>
+                          <p className="text-gray-500 mb-1 flex items-center gap-1">
+                            <Check size={14} />
+                            完成时间
+                          </p>
+                          <p className="font-medium text-gray-900">{formatDateTime(getRelatedTask(currentReport.id)?.endTime || '')}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -523,6 +570,90 @@ const PublicReportPage: React.FC = () => {
             <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
               <Button variant="secondary" onClick={() => { setShowTaskModal(false); setTaskSourceId(null); }}>取消</Button>
               <Button onClick={handleConfirmCreateTask} disabled={!taskAssignee || !taskStartTime}>确认生成</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showTaskDetail && relatedTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">关联任务详情</h2>
+              <button
+                onClick={() => { setShowTaskDetail(false); setRelatedTask(null); }}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="p-4 rounded-xl bg-blue-100 text-blue-600">
+                  <ClipboardList size={32} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">{relatedTask.title}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <StatusTag status={relatedTask.status} type="task" />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-500 mb-1 flex items-center gap-1">
+                  <User size={14} /> 执行人
+                </p>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                    <User size={16} />
+                  </div>
+                  <span className="font-medium text-gray-900">{relatedTask.assignee}</span>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-sm text-gray-500 mb-2">
+                  <span>巡查进度</span>
+                  <span className="font-medium text-gray-900">{relatedTask.progress}%</span>
+                </div>
+                <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      relatedTask.progress === 100 ? 'bg-emerald-500' : 'bg-blue-500'
+                    }`}
+                    style={{ width: `${relatedTask.progress}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <p className="text-sm text-gray-500 mb-1 flex items-center gap-1">
+                    <Calendar size={14} /> 开始时间
+                  </p>
+                  <p className="font-medium text-gray-900">{formatDateTime(relatedTask.startTime)}</p>
+                </div>
+                {relatedTask.endTime && (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1 flex items-center gap-1">
+                      <Check size={14} /> 完成时间
+                    </p>
+                    <p className="font-medium text-gray-900">{formatDateTime(relatedTask.endTime)}</p>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-500 mb-1">任务描述</p>
+                <p className="text-gray-700 bg-gray-50 p-4 rounded-xl">{relatedTask.description}</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
+              <Button variant="secondary" onClick={() => { setShowTaskDetail(false); setRelatedTask(null); }}>关闭</Button>
+              <Button>
+                <Eye size={14} className="mr-1" /> 查看完整任务
+              </Button>
             </div>
           </div>
         </div>

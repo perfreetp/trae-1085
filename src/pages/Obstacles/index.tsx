@@ -22,7 +22,8 @@ import { Button } from '@/components/ui/Button';
 import { StatusTag } from '@/components/common/StatusTag';
 import { useAppStore } from '@/store/useAppStore';
 import type { Obstacle } from '@/types';
-import { getObstacleTypeName, formatDate, formatDateTime, getRiskLevelName, getStatusName } from '@/utils/helpers';
+import { getObstacleTypeName, formatDate, formatDateTime, getRiskLevelName, getStatusName, parseObstacleType, parseRiskLevel } from '@/utils/helpers';
+import type { ImportError } from '@/types';
 
 const Obstacles: React.FC = () => {
   const { obstacles, addObstacle, updateObstacle, deleteObstacle, batchAddObstacles } = useAppStore();
@@ -35,6 +36,7 @@ const Obstacles: React.FC = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
   const [previewData, setPreviewData] = useState<Omit<Obstacle, 'id' | 'createdAt' | 'updatedAt'>[]>([]);
+  const [importErrors, setImportErrors] = useState<ImportError[]>([]);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [selectedObstacle, setSelectedObstacle] = useState<Obstacle | null>(null);
@@ -167,47 +169,93 @@ const Obstacles: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const parseImportData = (text: string) => {
+  const handleDownloadTemplate = () => {
+    const headers = ['名称', '类型', '高度', '地址', '责任单位', '联系人', '联系电话', '风险等级'];
+    const exampleRow = ['示例塔吊', '塔吊', '50', '北京市朝阳区建国路88号', '城建集团', '张三', '13800138000', '高风险'];
+
+    const csvContent = [
+      headers.join(','),
+      exampleRow.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(','),
+    ].join('\n');
+
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = '障碍物导入模板.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const parseImportData = (text: string): { data: Omit<Obstacle, 'id' | 'createdAt' | 'updatedAt'>[]; errors: ImportError[] } => {
     const lines = text.trim().split('\n').filter((line) => line.trim());
-    const validTypes = ['tower_crane', 'billboard', 'building', 'other'];
-    const validRiskLevels = ['low', 'medium', 'high'];
     const parsed: Omit<Obstacle, 'id' | 'createdAt' | 'updatedAt'>[] = [];
+    const errors: ImportError[] = [];
 
-    for (const line of lines) {
-      const parts = line.split(',').map((p) => p.trim());
-      if (parts.length < 8) continue;
+    lines.forEach((line, index) => {
+      const parts = line.split(',').map((p) => p.trim().replace(/^"|"$/g, ''));
+      const lineNum = index + 1;
+      const [name, typeStr, heightStr, address, ownerUnit, contactPerson, contactPhone, riskLevelStr] = parts;
 
-      const [name, type, height, address, ownerUnit, contactPerson, contactPhone, riskLevel] = parts;
-      if (!name || !address) continue;
-      if (!validTypes.includes(type)) continue;
-      if (!validRiskLevels.includes(riskLevel)) continue;
+      const lineErrors: string[] = [];
 
-      const heightNum = Number(height);
-      if (isNaN(heightNum)) continue;
+      if (!name || !address) {
+        lineErrors.push('缺少必填字段');
+      }
 
-      parsed.push({
-        name,
-        type: type as Obstacle['type'],
-        height: heightNum,
-        address,
-        ownerUnit,
-        contactPerson,
-        contactPhone,
-        riskLevel: riskLevel as Obstacle['riskLevel'],
-        isTemporary: false,
-        status: 'normal',
-        latitude: 31.2304,
-        longitude: 121.4737,
-        photos: [],
-      });
-    }
+      const heightNum = Number(heightStr);
+      if (isNaN(heightNum)) {
+        lineErrors.push('高度不是数字');
+      }
 
-    return parsed;
+      const parsedType = parseObstacleType(typeStr);
+      const validTypes = ['tower_crane', 'billboard', 'building', 'other'];
+      if (!validTypes.includes(parsedType) && typeStr) {
+        lineErrors.push('类型无效');
+      }
+
+      const parsedRiskLevel = parseRiskLevel(riskLevelStr);
+      const validRiskLevels = ['low', 'medium', 'high'];
+      if (!validRiskLevels.includes(parsedRiskLevel) && riskLevelStr) {
+        lineErrors.push('风险等级无效');
+      }
+
+      if (lineErrors.length > 0) {
+        errors.push({
+          line: lineNum,
+          content: line,
+          reason: lineErrors.join('、'),
+        });
+      } else {
+        parsed.push({
+          name,
+          type: parsedType as Obstacle['type'],
+          height: heightNum,
+          address,
+          ownerUnit: ownerUnit || '',
+          contactPerson: contactPerson || '',
+          contactPhone: contactPhone || '',
+          riskLevel: parsedRiskLevel as Obstacle['riskLevel'],
+          isTemporary: false,
+          status: 'normal',
+          latitude: 31.2304,
+          longitude: 121.4737,
+          photos: [],
+        });
+      }
+    });
+
+    return { data: parsed, errors };
   };
 
   const handleImportTextChange = (text: string) => {
     setImportText(text);
-    setPreviewData(parseImportData(text));
+    const { data, errors } = parseImportData(text);
+    setPreviewData(data);
+    setImportErrors(errors);
   };
 
   const handleBatchImport = () => {
@@ -216,6 +264,7 @@ const Obstacles: React.FC = () => {
     setShowImportModal(false);
     setImportText('');
     setPreviewData([]);
+    setImportErrors([]);
     setSuccessMessage(`成功导入 ${previewData.length} 条障碍物记录`);
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 3000);
@@ -714,7 +763,7 @@ const Obstacles: React.FC = () => {
             <div className="flex items-center justify-between p-6 border-b border-gray-100">
               <h2 className="text-xl font-bold text-gray-900">批量导入障碍物</h2>
               <button
-                onClick={() => { setShowImportModal(false); setImportText(''); setPreviewData([]); }}
+                onClick={() => { setShowImportModal(false); setImportText(''); setPreviewData([]); setImportErrors([]); }}
                 className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X size={20} />
@@ -722,12 +771,18 @@ const Obstacles: React.FC = () => {
             </div>
             <div className="p-6 space-y-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">数据格式说明</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">数据格式说明</label>
+                  <Button variant="secondary" size="sm" onClick={handleDownloadTemplate}>
+                    <Download size={14} className="mr-1" />
+                    下载导入模板
+                  </Button>
+                </div>
                 <div className="p-4 bg-gray-50 rounded-lg text-sm text-gray-600 space-y-2">
                   <p>每行一条数据，字段用逗号分隔，顺序如下：</p>
                   <p className="font-mono">名称,类型,高度,地址,责任单位,联系人,联系电话,风险等级</p>
-                  <p>类型可选值：tower_crane(塔吊), billboard(广告牌), building(建筑), other(其他)</p>
-                  <p>风险等级可选值：low(低风险), medium(中风险), high(高风险)</p>
+                  <p>类型可选值：塔吊、广告牌、建筑、其他</p>
+                  <p>风险等级可选值：低风险、中风险、高风险</p>
                 </div>
               </div>
               <div>
@@ -738,36 +793,74 @@ const Obstacles: React.FC = () => {
                   rows={8}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-mono"
                   placeholder="示例：
-塔吊1,tower_crane,50,北京市朝阳区建国路88号,城建集团,张三,13800138000,high
-广告牌1,billboard,15,北京市海淀区中关村大街,广告公司,李四,13900139000,medium"
+塔吊1,塔吊,50,北京市朝阳区建国路88号,城建集团,张三,13800138000,高风险
+广告牌1,广告牌,15,北京市海淀区中关村大街,广告公司,李四,13900139000,中风险"
                 />
               </div>
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium text-gray-700">
-                    数据预览 <span className="text-gray-500 font-normal">({previewData.length} 条有效数据)</span>
+                    数据预览
                   </label>
+                  <div className="text-sm">
+                    <span className="text-green-600 font-medium">成功 {previewData.length} 条</span>
+                    <span className="text-gray-400 mx-2">|</span>
+                    <span className="text-red-600 font-medium">失败 {importErrors.length} 条</span>
+                  </div>
                 </div>
                 <div className="border border-gray-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
-                  {previewData.length > 0 ? (
+                  {previewData.length > 0 || importErrors.length > 0 ? (
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 sticky top-0">
                         <tr>
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500 w-12">行号</th>
                           <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">名称</th>
                           <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">类型</th>
                           <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">高度</th>
                           <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">地址</th>
                           <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">风险等级</th>
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">状态</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {previewData.map((item, index) => (
-                          <tr key={index}>
+                          <tr key={`success-${index}`} className="bg-green-50">
+                            <td className="py-2 px-3 text-gray-500">{index + 1}</td>
                             <td className="py-2 px-3 text-gray-900">{item.name}</td>
                             <td className="py-2 px-3 text-gray-600">{getObstacleTypeName(item.type)}</td>
                             <td className="py-2 px-3 text-gray-600">{item.height}m</td>
                             <td className="py-2 px-3 text-gray-600 max-w-xs truncate">{item.address}</td>
                             <td className="py-2 px-3"><StatusTag status={item.riskLevel} type="risk" /></td>
+                            <td className="py-2 px-3">
+                              <span className="inline-flex items-center gap-1 text-green-600 text-xs font-medium">
+                                <Check size={12} />
+                                成功
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                        {importErrors.map((error, index) => (
+                          <tr
+                            key={`error-${index}`}
+                            className="bg-red-50 cursor-help group relative"
+                            title={error.reason}
+                          >
+                            <td className="py-2 px-3 text-gray-500">{error.line}</td>
+                            <td className="py-2 px-3 text-gray-900" colSpan={4}>
+                              <span className="text-gray-600 truncate block max-w-xs">{error.content}</span>
+                            </td>
+                            <td className="py-2 px-3">-</td>
+                            <td className="py-2 px-3">
+                              <span className="inline-flex items-center gap-1 text-red-600 text-xs font-medium">
+                                <X size={12} />
+                                失败
+                              </span>
+                              <div className="absolute left-0 right-0 bottom-full mb-1 hidden group-hover:block z-10">
+                                <div className="bg-gray-900 text-white text-xs rounded px-2 py-1 shadow-lg">
+                                  {error.reason}
+                                </div>
+                              </div>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -781,11 +874,18 @@ const Obstacles: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
-              <Button variant="secondary" onClick={() => { setShowImportModal(false); setImportText(''); setPreviewData([]); }}>取消</Button>
-              <Button onClick={handleBatchImport} disabled={previewData.length === 0}>
-                确认导入
-              </Button>
+            <div className="flex justify-between items-center p-6 border-t border-gray-100 bg-gray-50">
+              <div className="text-sm text-gray-600">
+                共 <span className="font-semibold">{previewData.length + importErrors.length}</span> 条数据，
+                <span className="text-green-600 font-semibold">成功 {previewData.length} 条</span>，
+                <span className="text-red-600 font-semibold">失败 {importErrors.length} 条</span>
+              </div>
+              <div className="flex gap-3">
+                <Button variant="secondary" onClick={() => { setShowImportModal(false); setImportText(''); setPreviewData([]); setImportErrors([]); }}>取消</Button>
+                <Button onClick={handleBatchImport} disabled={previewData.length === 0}>
+                  确认导入
+                </Button>
+              </div>
             </div>
           </div>
         </div>

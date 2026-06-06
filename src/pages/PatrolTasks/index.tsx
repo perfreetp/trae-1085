@@ -17,12 +17,14 @@ import {
   Map,
   Camera,
   Send,
+  FileText,
+  Phone,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatusTag } from '@/components/common/StatusTag';
 import { useAppStore } from '@/store/useAppStore';
-import type { PatrolTask, RoutePoint } from '@/types';
+import type { PatrolTask, RoutePoint, PublicReport } from '@/types';
 import { getTaskTypeName, formatDate, formatDateTime } from '@/utils/helpers';
 
 interface NewRoutePoint {
@@ -32,7 +34,7 @@ interface NewRoutePoint {
 }
 
 const PatrolTasksPage: React.FC = () => {
-  const { patrolTasks, addPatrolTask, startTask, checkRoutePoint } = useAppStore();
+  const { patrolTasks, publicReports, addPatrolTask, startTask, checkRoutePoint } = useAppStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -42,6 +44,8 @@ const PatrolTasksPage: React.FC = () => {
   const [selectedPoint, setSelectedPoint] = useState<RoutePoint | null>(null);
   const [patrolRemark, setPatrolRemark] = useState('');
   const [patrolPhotos, setPatrolPhotos] = useState<string[]>([]);
+  const [showReportDetail, setShowReportDetail] = useState(false);
+  const [relatedReport, setRelatedReport] = useState<PublicReport | null>(null);
 
   const [createForm, setCreateForm] = useState({
     title: '',
@@ -70,9 +74,19 @@ const PatrolTasksPage: React.FC = () => {
     selectedTask ? patrolTasks.find(t => t.id === selectedTask.id) || null : null,
   [patrolTasks, selectedTask]);
 
+  const sourceReport = useMemo(() => {
+    if (!currentTask?.sourceReportId) return null;
+    return publicReports.find(r => r.id === currentTask.sourceReportId) || null;
+  }, [currentTask, publicReports]);
+
   const handleViewDetail = (task: PatrolTask) => {
     setSelectedTask(task);
     setShowDetailModal(true);
+  };
+
+  const handleViewSourceReport = (report: PublicReport) => {
+    setRelatedReport(report);
+    setShowReportDetail(true);
   };
 
   const handleOpenCreateModal = () => {
@@ -403,6 +417,50 @@ const PatrolTasksPage: React.FC = () => {
                 <p className="text-gray-700">{currentTask.description}</p>
               </div>
 
+              {sourceReport && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
+                        <FileText size={18} />
+                      </div>
+                      <h4 className="font-semibold text-blue-900">来源线索</h4>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => handleViewSourceReport(sourceReport)}>
+                      <Eye size={14} className="mr-1" /> 查看完整线索
+                    </Button>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm text-blue-700 font-medium">{sourceReport.title}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <User size={14} className="text-blue-500" />
+                        <span className="text-blue-800">上报人：{sourceReport.reporterName}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Phone size={14} className="text-blue-500" />
+                        <span className="text-blue-800">联系电话：{sourceReport.reporterPhone}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2 text-sm">
+                      <MapPin size={14} className="text-blue-500 mt-0.5" />
+                      <span className="text-blue-800">{sourceReport.location.address}</span>
+                    </div>
+                    {sourceReport.photos && sourceReport.photos.length > 0 && (
+                      <div className="flex gap-2 mt-2">
+                        {sourceReport.photos.slice(0, 3).map((photo, i) => (
+                          <div key={i} className="w-16 h-16 rounded-lg bg-blue-100 overflow-hidden">
+                            <img src={photo} alt="" className="w-full h-full object-cover" />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-sm font-medium text-gray-900">巡查路线</p>
@@ -660,6 +718,89 @@ const PatrolTasksPage: React.FC = () => {
                 <Check size={16} className="mr-2" />
                 确认打卡
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReportDetail && relatedReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-xl">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-xl font-bold text-gray-900">线索详情</h2>
+              <button
+                onClick={() => setShowReportDetail(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="p-4 rounded-xl bg-blue-100 text-blue-600">
+                  <FileText size={32} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">{relatedReport.title}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <StatusTag status={relatedReport.status} type="report" />
+                    <span className="text-sm text-gray-500">{formatDateTime(relatedReport.createdAt)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">上报人</p>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                      <User size={16} />
+                    </div>
+                    <span className="font-medium text-gray-900">{relatedReport.reporterName}</span>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">联系电话</p>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600">
+                      <Phone size={16} />
+                    </div>
+                    <span className="font-medium text-gray-900">{relatedReport.reporterPhone}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-500 mb-1">位置地址</p>
+                <div className="flex items-start gap-2">
+                  <MapPin size={16} className="text-gray-400 mt-0.5" />
+                  <span className="font-medium text-gray-900">{relatedReport.location.address}</span>
+                </div>
+                <p className="text-sm text-gray-500 mt-1 ml-6">
+                  坐标：{relatedReport.location.latitude.toFixed(4)}, {relatedReport.location.longitude.toFixed(4)}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-500 mb-1">线索描述</p>
+                <p className="text-gray-700">{relatedReport.description}</p>
+              </div>
+
+              {relatedReport.photos && relatedReport.photos.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-gray-900 mb-3">原始照片</p>
+                  <div className="grid grid-cols-4 gap-3">
+                    {relatedReport.photos.map((photo, i) => (
+                      <div key={i} className="aspect-square rounded-xl bg-gray-100 overflow-hidden">
+                        <img src={photo} alt="" className="w-full h-full object-cover" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
+              <Button variant="secondary" onClick={() => setShowReportDetail(false)}>关闭</Button>
             </div>
           </div>
         </div>

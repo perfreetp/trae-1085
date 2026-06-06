@@ -8,6 +8,7 @@ import Inspection from "@/pages/Inspection";
 import RiskAssessment from "@/pages/RiskAssessment";
 import Announcements from "@/pages/Announcements";
 import Reports from "@/pages/Reports";
+import Todo from "@/pages/Todo";
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="/risk-assessment" element={<RiskAssessment />} />
           <Route path="/announcements" element={<Announcements />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/todo" element={<Todo />} />
         </Route>
       </Routes>
     </Router>

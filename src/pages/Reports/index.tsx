@@ -34,6 +34,7 @@ import {
   obstacleTypeData,
   riskLevelData,
 } from '@/data/reports';
+import { useAppStore } from '@/store/useAppStore';
 
 type TimeRange = 'month' | 'quarter' | 'year';
 type UnitDimension = 'all' | 'byUnit';
@@ -49,6 +50,7 @@ interface UnitStat {
 const Reports = () => {
   const [timeRange, setTimeRange] = useState<TimeRange>('month');
   const [unitDimension, setUnitDimension] = useState<UnitDimension>('all');
+  const getUnitStats = useAppStore((state) => state.getUnitStats);
 
   const statisticsByTimeRange = useMemo(() => {
     const base = {
@@ -213,47 +215,15 @@ const Reports = () => {
   }, [timeRange]);
 
   const unitStatsData = useMemo((): UnitStat[] => {
-    const baseUnits = [
-      { name: '城东街道办事处' },
-      { name: '城西街道办事处' },
-      { name: '城南街道办事处' },
-      { name: '城北街道办事处' },
-      { name: '开发区管委会' },
-      { name: '交通运输局' },
-    ];
-
-    switch (timeRange) {
-      case 'month':
-        return [
-          { name: baseUnits[0].name, obstacles: 32, notices: 18, overdue: 3, completionRate: 82.5 },
-          { name: baseUnits[1].name, obstacles: 28, notices: 15, overdue: 2, completionRate: 88.3 },
-          { name: baseUnits[2].name, obstacles: 25, notices: 12, overdue: 1, completionRate: 91.7 },
-          { name: baseUnits[3].name, obstacles: 30, notices: 16, overdue: 4, completionRate: 76.2 },
-          { name: baseUnits[4].name, obstacles: 22, notices: 10, overdue: 0, completionRate: 95.8 },
-          { name: baseUnits[5].name, obstacles: 19, notices: 8, overdue: 2, completionRate: 84.6 },
-        ];
-      case 'quarter':
-        return [
-          { name: baseUnits[0].name, obstacles: 95, notices: 52, overdue: 8, completionRate: 85.2 },
-          { name: baseUnits[1].name, obstacles: 82, notices: 45, overdue: 5, completionRate: 90.1 },
-          { name: baseUnits[2].name, obstacles: 75, notices: 38, overdue: 3, completionRate: 93.5 },
-          { name: baseUnits[3].name, obstacles: 88, notices: 48, overdue: 10, completionRate: 79.6 },
-          { name: baseUnits[4].name, obstacles: 65, notices: 32, overdue: 2, completionRate: 96.3 },
-          { name: baseUnits[5].name, obstacles: 58, notices: 28, overdue: 4, completionRate: 87.9 },
-        ];
-      case 'year':
-        return [
-          { name: baseUnits[0].name, obstacles: 380, notices: 210, overdue: 25, completionRate: 87.6 },
-          { name: baseUnits[1].name, obstacles: 325, notices: 180, overdue: 18, completionRate: 91.2 },
-          { name: baseUnits[2].name, obstacles: 298, notices: 165, overdue: 12, completionRate: 94.5 },
-          { name: baseUnits[3].name, obstacles: 350, notices: 195, overdue: 32, completionRate: 82.8 },
-          { name: baseUnits[4].name, obstacles: 260, notices: 140, overdue: 8, completionRate: 96.9 },
-          { name: baseUnits[5].name, obstacles: 235, notices: 125, overdue: 15, completionRate: 89.7 },
-        ];
-      default:
-        return [];
-    }
-  }, [timeRange]);
+    const stats = getUnitStats(timeRange);
+    return stats.map((item) => ({
+      name: item.unitName,
+      obstacles: item.obstacleCount,
+      notices: item.rectificationCount,
+      overdue: item.overdueCount,
+      completionRate: item.taskCompletionRate,
+    }));
+  }, [timeRange, getUnitStats]);
 
   const unitBarChartData = useMemo(() => {
     return unitStatsData.map((item) => ({

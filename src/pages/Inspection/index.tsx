@@ -15,6 +15,7 @@ import {
   Filter,
   RefreshCw,
   History,
+  Bell,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -32,6 +33,7 @@ const Inspection: React.FC = () => {
     requestRecheck,
     passRecheck,
     returnRectification,
+    urgeRectification,
     currentUser,
   } = useAppStore();
 
@@ -53,6 +55,8 @@ const Inspection: React.FC = () => {
   const [showReceiveModal, setShowReceiveModal] = useState(false);
   const [recheckRemark, setRecheckRemark] = useState('');
   const [showRecheckRequestModal, setShowRecheckRequestModal] = useState(false);
+  const [urgeContent, setUrgeContent] = useState('');
+  const [showUrgeModal, setShowUrgeModal] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [unitFilter, setUnitFilter] = useState<string>('');
@@ -169,6 +173,22 @@ const Inspection: React.FC = () => {
       setShowRecheckRequestModal(false);
       setSelectedNotice(null);
       setRecheckRemark('');
+    }
+  };
+
+  const handleOpenUrgeModal = (notice: RectificationNotice, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedNotice(notice);
+    setUrgeContent('');
+    setShowUrgeModal(true);
+  };
+
+  const handleUrgeRectification = () => {
+    if (selectedNotice && urgeContent && currentUser) {
+      urgeRectification(selectedNotice.id, urgeContent, currentUser.name);
+      setShowUrgeModal(false);
+      setSelectedNotice(null);
+      setUrgeContent('');
     }
   };
 
@@ -508,6 +528,12 @@ const Inspection: React.FC = () => {
                               <Clock size={14} />
                               下发：{formatDate(notice.issueTime)}
                             </span>
+                            {notice.lastUrgeTime && (
+                              <span className="flex items-center gap-1 text-amber-600">
+                                <Bell size={14} />
+                                最近催办：{formatDateTime(notice.lastUrgeTime)}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -531,6 +557,11 @@ const Inspection: React.FC = () => {
                               <Check size={14} className="mr-1" /> 通过销号
                             </Button>
                           </>
+                        )}
+                        {notice.status !== 'completed' && !overdue && (
+                          <Button size="sm" variant="warning" onClick={(e) => handleOpenUrgeModal(notice, e)}>
+                            <Bell size={14} className="mr-1" /> 催办
+                          </Button>
                         )}
                       </div>
                     </div>
@@ -667,22 +698,31 @@ const Inspection: React.FC = () => {
                     <div key={record.id} className="flex gap-4 pb-6 last:pb-0">
                       <div className="flex flex-col items-center">
                         <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                          record.action === 'urge' ? 'bg-amber-500' :
                           index === 0 ? 'bg-blue-500' :
                           index === currentNotice.flowRecords.length - 1 ? 'bg-emerald-500' :
                           'bg-gray-400'
                         }`} />
                         {index < currentNotice.flowRecords.length - 1 && (
-                          <div className="w-0.5 flex-1 bg-gray-200 mt-1" />
+                          <div className={`w-0.5 flex-1 mt-1 ${
+                            record.action === 'urge' ? 'bg-amber-200' : 'bg-gray-200'
+                          }`} />
                         )}
                       </div>
                       <div className="flex-1 pb-0">
                         <div className="flex items-center justify-between">
-                          <p className="font-medium text-gray-900">{record.actionName}</p>
+                          <p className={`font-medium ${
+                            record.action === 'urge' ? 'text-amber-700' : 'text-gray-900'
+                          }`}>{record.actionName}</p>
                           <span className="text-xs text-gray-500">{formatDateTime(record.operateTime)}</span>
                         </div>
                         <p className="text-sm text-gray-500 mt-1">操作人：{record.operator}</p>
                         {record.remark && (
-                          <p className="text-sm text-gray-600 mt-1 bg-gray-50 p-2 rounded-lg">
+                          <p className={`text-sm mt-1 p-2 rounded-lg ${
+                            record.action === 'urge' 
+                              ? 'text-amber-700 bg-amber-50 border border-amber-200' 
+                              : 'text-gray-600 bg-gray-50'
+                          }`}>
                             {record.remark}
                           </p>
                         )}
@@ -691,6 +731,27 @@ const Inspection: React.FC = () => {
                   ))}
                 </div>
               </div>
+
+              {currentNotice.urgeRecords && currentNotice.urgeRecords.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <Bell size={18} className="text-amber-500" />
+                    <p className="font-medium text-gray-700">催办记录</p>
+                  </div>
+                  <div className="space-y-3">
+                    {currentNotice.urgeRecords.map((record) => (
+                      <div key={record.id} className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="font-medium text-amber-800">催办</p>
+                          <span className="text-xs text-amber-600">{formatDateTime(record.urgeTime)}</span>
+                        </div>
+                        <p className="text-sm text-gray-500 mb-2">操作人：{record.operator}</p>
+                        <p className="text-sm text-amber-700">{record.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
               <Button variant="secondary" onClick={() => setShowDetailModal(false)}>关闭</Button>
@@ -897,6 +958,49 @@ const Inspection: React.FC = () => {
             <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
               <Button variant="secondary" onClick={() => { setShowRecheckRequestModal(false); setRecheckRemark(''); }}>取消</Button>
               <Button onClick={handleRequestRecheck}>申请复查</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showUrgeModal && selectedNotice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">催办整改</h2>
+              <button
+                onClick={() => { setShowUrgeModal(false); setUrgeContent(''); }}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+                <p className="text-sm text-amber-700">
+                  <span className="font-medium">整改通知：</span>{selectedNotice.title}
+                </p>
+                <p className="text-sm text-amber-600 mt-1">
+                  责任单位：{selectedNotice.responsibleUnit}
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">催办内容 <span className="text-red-500">*</span></label>
+                <textarea
+                  value={urgeContent}
+                  onChange={(e) => setUrgeContent(e.target.value)}
+                  rows={4}
+                  placeholder="请填写催办内容说明..."
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 resize-none"
+                />
+              </div>
+              <p className="text-sm text-gray-500">
+                操作人：<span className="font-medium text-gray-700">{currentUser?.name}</span>
+              </p>
+            </div>
+            <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
+              <Button variant="secondary" onClick={() => { setShowUrgeModal(false); setUrgeContent(''); }}>取消</Button>
+              <Button variant="warning" onClick={handleUrgeRectification} disabled={!urgeContent}>确认催办</Button>
             </div>
           </div>
         </div>

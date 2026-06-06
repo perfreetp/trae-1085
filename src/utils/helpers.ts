@@ -49,6 +49,7 @@ export const getStatusName = (status: string): string => {
     rechecking: '复查中',
     overdue: '已逾期',
     draft: '草稿',
+    scheduled: '待发布',
     published: '已发布',
     archived: '已归档',
   };
@@ -84,4 +85,38 @@ export const getAnnouncementTypeName = (type: string): string => {
 
 export const generateId = (): string => {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
+};
+
+export const isOverdue = (deadline: string): boolean => {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const deadlineDate = new Date(deadline);
+  deadlineDate.setHours(0, 0, 0, 0);
+  return deadlineDate < now;
+};
+
+export const parseObstacleType = (typeStr: string): string => {
+  const typeMap: Record<string, string> = {
+    '塔吊': 'tower_crane',
+    '广告牌': 'billboard',
+    '建筑': 'building',
+    '其他': 'other',
+    'tower_crane': 'tower_crane',
+    'billboard': 'billboard',
+    'building': 'building',
+    'other': 'other',
+  };
+  return typeMap[typeStr] || 'other';
+};
+
+export const parseRiskLevel = (levelStr: string): string => {
+  const levelMap: Record<string, string> = {
+    '低风险': 'low',
+    '中风险': 'medium',
+    '高风险': 'high',
+    'low': 'low',
+    'medium': 'medium',
+    'high': 'high',
+  };
+  return levelMap[levelStr] || 'low';
 };

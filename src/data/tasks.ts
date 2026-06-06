@@ -19,16 +19,17 @@ export const mockPatrolTasks: PatrolTask[] = [
   },
   {
     id: '2',
-    title: '国贸中心超高建筑专项核查',
+    title: '科技园新建办公楼超高核查',
     type: 'special',
     status: 'pending',
     assignee: '王强',
     routePoints: [
-      { id: 'p4', name: '国际贸易中心大厦', latitude: 31.2356, longitude: 121.5012, order: 1, checked: false },
+      { id: 'p4', name: '张江科技园新建办公楼', latitude: 31.2078, longitude: 121.5123, order: 1, checked: false },
     ],
     startTime: '2026-06-05T10:00:00Z',
     progress: 0,
-    description: '针对国贸中心超高预警进行专项核查，核实实际高度，评估对净空的影响。',
+    description: '根据群众举报，对科技园新建办公楼高度问题进行专项核查。',
+    sourceReportId: '2',
     createdAt: '2026-06-02T15:00:00Z',
   },
   {
@@ -59,6 +60,7 @@ export const mockPatrolTasks: PatrolTask[] = [
     startTime: '2026-06-03T13:30:00Z',
     progress: 50,
     description: '根据群众举报，对疑似超高障碍物进行紧急核查。',
+    sourceReportId: '1',
     createdAt: '2026-06-03T12:00:00Z',
   },
 ];
@@ -87,6 +89,7 @@ export const mockRectificationNotices: RectificationNotice[] = [
         remark: '经核查发现超高问题，下发整改通知',
       },
     ],
+    urgeRecords: [],
   },
   {
     id: '2',
@@ -120,6 +123,7 @@ export const mockRectificationNotices: RectificationNotice[] = [
         remark: '已收到通知，立即安排整改',
       },
     ],
+    urgeRecords: [],
   },
   {
     id: '3',
@@ -163,5 +167,6 @@ export const mockRectificationNotices: RectificationNotice[] = [
         remark: '整改完成，申请复查',
       },
     ],
+    urgeRecords: [],
   },
 ];

@@ -32,6 +32,7 @@ export const StatusTag: React.FC<StatusTagProps> = ({ status, type = 'obstacle' 
       case 'rectifying':
       case 'rechecking':
       case 'draft':
+      case 'scheduled':
         return 'warning';
       case 'overheight':
       case 'rejected':

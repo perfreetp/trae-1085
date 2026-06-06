@@ -1,10 +1,17 @@
 export interface FlowRecord {
   id: string;
-  action: 'issue' | 'receive' | 'request_recheck' | 'pass' | 'return' | 'create' | 'publish' | 'withdraw';
+  action: 'issue' | 'receive' | 'request_recheck' | 'pass' | 'return' | 'create' | 'publish' | 'withdraw' | 'urge';
   actionName: string;
   operator: string;
   operateTime: string;
   remark?: string;
+}
+
+export interface UrgeRecord {
+  id: string;
+  content: string;
+  operator: string;
+  urgeTime: string;
 }
 
 export interface Obstacle {
@@ -92,6 +99,8 @@ export interface RectificationNotice {
   returnTime?: string;
   photos: string[];
   flowRecords: FlowRecord[];
+  urgeRecords: UrgeRecord[];
+  lastUrgeTime?: string;
 }
 
 export interface Announcement {
@@ -99,8 +108,9 @@ export interface Announcement {
   title: string;
   content: string;
   type: 'notice' | 'warning' | 'policy';
-  status: 'draft' | 'published' | 'archived';
+  status: 'draft' | 'scheduled' | 'published' | 'archived';
   publishTime?: string;
+  scheduledPublishTime?: string;
   author: string;
   views: number;
   createdAt: string;
@@ -123,6 +133,19 @@ export interface Notification {
   read: boolean;
 }
 
+export interface TodoItem {
+  id: string;
+  type: 'report_pending' | 'notice_receive' | 'notice_recheck' | 'notice_overdue' | 'task_pending';
+  typeName: string;
+  title: string;
+  sourceModule: string;
+  responsibleUnit?: string;
+  assignee?: string;
+  deadline?: string;
+  planTime?: string;
+  relatedId: string;
+}
+
 export interface Statistics {
   totalObstacles: number;
   pendingTasks: number;
@@ -131,6 +154,10 @@ export interface Statistics {
   taskCompletionRate: number;
   reportProcessingRate: number;
   overdueNotices: number;
+  pendingReports: number;
+  pendingReceiveNotices: number;
+  pendingRecheckNotices: number;
+  totalTodos: number;
 }
 
 export interface RiskHotspot {
@@ -148,4 +175,12 @@ export interface UnitStats {
   rectificationCount: number;
   overdueCount: number;
   taskCompletionRate: number;
+  taskCount: number;
+  completedTaskCount: number;
+}
+
+export interface ImportError {
+  line: number;
+  content: string;
+  reason: string;
 }

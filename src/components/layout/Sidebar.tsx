@@ -10,6 +10,7 @@ import {
   Bell,
   BarChart3,
   Shield,
+  CheckSquare,
 } from 'lucide-react';
 import { cn } from '@/utils/helpers';
 import { useAppStore } from '@/store/useAppStore';
@@ -18,10 +19,12 @@ interface NavItem {
   path: string;
   label: string;
   icon: React.ReactNode;
+  showBadge?: boolean;
 }
 
 const navItems: NavItem[] = [
   { path: '/', label: '地图首页', icon: <Map size={20} /> },
+  { path: '/todo', label: '协同待办', icon: <CheckSquare size={20} />, showBadge: true },
   { path: '/obstacles', label: '障碍物台账', icon: <Building2 size={20} /> },
   { path: '/patrol-tasks', label: '巡查任务', icon: <ClipboardList size={20} /> },
   { path: '/public-report', label: '群众上报', icon: <Users size={20} /> },
@@ -32,7 +35,8 @@ const navItems: NavItem[] = [
 ];
 
 export const Sidebar: React.FC = () => {
-  const { sidebarCollapsed } = useAppStore();
+  const { sidebarCollapsed, getTodoList } = useAppStore();
+  const todoCount = getTodoList().length;
 
   return (
     <aside
@@ -64,7 +68,7 @@ export const Sidebar: React.FC = () => {
                 end={item.path === '/'}
                 className={({ isActive }) =>
                   cn(
-                    'flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-all duration-200',
+                    'flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-all duration-200 relative',
                     isActive
                       ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
                       : 'text-slate-400 hover:bg-slate-800 hover:text-white',
@@ -74,6 +78,11 @@ export const Sidebar: React.FC = () => {
               >
                 {item.icon}
                 {!sidebarCollapsed && <span>{item.label}</span>}
+                {item.showBadge && todoCount > 0 && (
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center min-w-5 h-5 px-1.5 bg-red-500 text-white text-xs font-bold rounded-full">
+                    {todoCount > 99 ? '99+' : todoCount}
+                  </span>
+                )}
               </NavLink>
             </li>
           ))}

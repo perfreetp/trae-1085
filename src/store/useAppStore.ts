@@ -8,12 +8,15 @@ import type {
   RectificationNotice,
   Announcement,
   FlowRecord,
+  UrgeRecord,
+  TodoItem,
+  UnitStats,
 } from '@/types';
 import { mockObstacles } from '@/data/obstacles';
 import { mockPatrolTasks, mockRectificationNotices } from '@/data/tasks';
 import { mockPublicReports } from '@/data/reports';
 import { mockAnnouncements } from '@/data/announcements';
-import { generateId } from '@/utils/helpers';
+import { generateId, isOverdue } from '@/utils/helpers';
 
 interface AppState {
   sidebarCollapsed: boolean;
@@ -45,20 +48,25 @@ interface AppState {
   mergeReport: (sourceId: string, targetId: string) => void;
 
   rectificationNotices: RectificationNotice[];
-  addRectificationNotice: (notice: Omit<RectificationNotice, 'id' | 'flowRecords'>) => void;
+  addRectificationNotice: (notice: Omit<RectificationNotice, 'id' | 'flowRecords' | 'urgeRecords'>) => void;
   updateRectificationNotice: (id: string, data: Partial<RectificationNotice>) => void;
   confirmReceive: (id: string, operator: string, remark?: string) => void;
   requestRecheck: (id: string, operator: string, remark?: string) => void;
   passRecheck: (id: string, result: string, operator: string) => void;
   returnRectification: (id: string, reason: string, operator: string) => void;
+  urgeRectification: (id: string, content: string, operator: string) => void;
   addFlowRecord: (noticeId: string, record: Omit<FlowRecord, 'id'>) => void;
 
   announcements: Announcement[];
   addAnnouncement: (announcement: Omit<Announcement, 'id' | 'createdAt' | 'views' | 'updatedAt'>) => void;
   updateAnnouncement: (id: string, data: Partial<Announcement>) => void;
   publishAnnouncement: (id: string) => void;
+  scheduleAnnouncement: (id: string, scheduledTime: string) => void;
   withdrawAnnouncement: (id: string) => void;
   deleteAnnouncement: (id: string) => void;
+
+  getTodoList: () => TodoItem[];
+  getUnitStats: (timeRange: 'month' | 'quarter' | 'year') => UnitStats[];
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -283,6 +291,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             remark: '系统自动下发',
           },
         ],
+        urgeRecords: [],
       };
       return { rectificationNotices: [newNotice, ...state.rectificationNotices] };
     }),
@@ -407,6 +416,37 @@ export const useAppStore = create<AppState>((set, get) => ({
       ),
     }));
   },
+  urgeRectification: (id, content, operator) => {
+    const now = new Date().toISOString();
+    const urgeRecord: UrgeRecord = {
+      id: generateId(),
+      content,
+      operator,
+      urgeTime: now,
+    };
+    set((state) => ({
+      rectificationNotices: state.rectificationNotices.map((n) =>
+        n.id === id
+          ? {
+              ...n,
+              urgeRecords: [...(n.urgeRecords || []), urgeRecord],
+              lastUrgeTime: now,
+              flowRecords: [
+                ...n.flowRecords,
+                {
+                  id: generateId(),
+                  action: 'urge',
+                  actionName: '催办',
+                  operator,
+                  operateTime: now,
+                  remark: content,
+                },
+              ],
+            }
+          : n
+      ),
+    }));
+  },
 
   announcements: [...mockAnnouncements],
   addAnnouncement: (announcement) =>
@@ -431,17 +471,185 @@ export const useAppStore = create<AppState>((set, get) => ({
   publishAnnouncement: (id) =>
     set((state) => ({
       announcements: state.announcements.map((a) =>
-        a.id === id ? { ...a, status: 'published' as const, publishTime: new Date().toISOString(), views: 0, updatedAt: new Date().toISOString() } : a
+        a.id === id ? { ...a, status: 'published' as const, publishTime: new Date().toISOString(), scheduledPublishTime: undefined, views: 0, updatedAt: new Date().toISOString() } : a
+      ),
+    })),
+  scheduleAnnouncement: (id, scheduledTime) =>
+    set((state) => ({
+      announcements: state.announcements.map((a) =>
+        a.id === id ? { ...a, status: 'scheduled' as const, scheduledPublishTime: scheduledTime, updatedAt: new Date().toISOString() } : a
       ),
     })),
   withdrawAnnouncement: (id) =>
     set((state) => ({
       announcements: state.announcements.map((a) =>
-        a.id === id ? { ...a, status: 'draft' as const, publishTime: undefined, updatedAt: new Date().toISOString() } : a
+        a.id === id ? { ...a, status: 'draft' as const, publishTime: undefined, scheduledPublishTime: undefined, updatedAt: new Date().toISOString() } : a
       ),
     })),
   deleteAnnouncement: (id) =>
     set((state) => ({
       announcements: state.announcements.filter((a) => a.id !== id),
     })),
+
+  getTodoList: () => {
+    const state = get();
+    const todos: TodoItem[] = [];
+
+    state.publicReports
+      .filter((r) => r.status === 'pending')
+      .forEach((r) => {
+        todos.push({
+          id: `report_${r.id}`,
+          type: 'report_pending',
+          typeName: '待审核线索',
+          title: r.title,
+          sourceModule: '群众上报',
+          assignee: r.reporterName,
+          planTime: r.createdAt,
+          relatedId: r.id,
+        });
+      });
+
+    state.rectificationNotices
+      .filter((n) => n.status === 'issued')
+      .forEach((n) => {
+        todos.push({
+          id: `notice_receive_${n.id}`,
+          type: 'notice_receive',
+          typeName: '待接收整改',
+          title: n.title,
+          sourceModule: '核查处置',
+          responsibleUnit: n.responsibleUnit,
+          deadline: n.deadline,
+          relatedId: n.id,
+        });
+      });
+
+    state.rectificationNotices
+      .filter((n) => n.status === 'rechecking')
+      .forEach((n) => {
+        todos.push({
+          id: `notice_recheck_${n.id}`,
+          type: 'notice_recheck',
+          typeName: '待复查通知',
+          title: n.title,
+          sourceModule: '核查处置',
+          responsibleUnit: n.responsibleUnit,
+          deadline: n.deadline,
+          relatedId: n.id,
+        });
+      });
+
+    state.rectificationNotices
+      .filter((n) => n.status !== 'completed' && isOverdue(n.deadline))
+      .forEach((n) => {
+        todos.push({
+          id: `notice_overdue_${n.id}`,
+          type: 'notice_overdue',
+          typeName: '逾期整改',
+          title: n.title,
+          sourceModule: '核查处置',
+          responsibleUnit: n.responsibleUnit,
+          deadline: n.deadline,
+          relatedId: n.id,
+        });
+      });
+
+    state.patrolTasks
+      .filter((t) => t.status === 'pending')
+      .forEach((t) => {
+        todos.push({
+          id: `task_${t.id}`,
+          type: 'task_pending',
+          typeName: '待开始任务',
+          title: t.title,
+          sourceModule: '巡查任务',
+          assignee: t.assignee,
+          planTime: t.startTime,
+          relatedId: t.id,
+        });
+      });
+
+    return todos;
+  },
+
+  getUnitStats: (timeRange) => {
+    const state = get();
+    const now = new Date();
+    let startDate: Date;
+
+    switch (timeRange) {
+      case 'month':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case 'quarter':
+        const quarter = Math.floor(now.getMonth() / 3);
+        startDate = new Date(now.getFullYear(), quarter * 3, 1);
+        break;
+      case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        break;
+      default:
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
+    const unitMap = new Map<string, {
+      obstacleCount: number;
+      rectificationCount: number;
+      overdueCount: number;
+      taskCount: number;
+      completedTaskCount: number;
+    }>();
+
+    state.obstacles.forEach((o) => {
+      if (new Date(o.createdAt) >= startDate && o.ownerUnit) {
+        if (!unitMap.has(o.ownerUnit)) {
+          unitMap.set(o.ownerUnit, { obstacleCount: 0, rectificationCount: 0, overdueCount: 0, taskCount: 0, completedTaskCount: 0 });
+        }
+        unitMap.get(o.ownerUnit)!.obstacleCount++;
+      }
+    });
+
+    state.rectificationNotices.forEach((n) => {
+      if (new Date(n.issueTime) >= startDate && n.responsibleUnit) {
+        if (!unitMap.has(n.responsibleUnit)) {
+          unitMap.set(n.responsibleUnit, { obstacleCount: 0, rectificationCount: 0, overdueCount: 0, taskCount: 0, completedTaskCount: 0 });
+        }
+        unitMap.get(n.responsibleUnit)!.rectificationCount++;
+        if (n.status !== 'completed' && isOverdue(n.deadline)) {
+          unitMap.get(n.responsibleUnit)!.overdueCount++;
+        }
+      }
+    });
+
+    state.patrolTasks.forEach((t) => {
+      if (new Date(t.createdAt) >= startDate) {
+        const unitName = t.assignee.includes('街道') || t.assignee.includes('管委会') || t.assignee.includes('局') 
+          ? t.assignee 
+          : '其他单位';
+        if (!unitMap.has(unitName)) {
+          unitMap.set(unitName, { obstacleCount: 0, rectificationCount: 0, overdueCount: 0, taskCount: 0, completedTaskCount: 0 });
+        }
+        unitMap.get(unitName)!.taskCount++;
+        if (t.status === 'completed') {
+          unitMap.get(unitName)!.completedTaskCount++;
+        }
+      }
+    });
+
+    const result: UnitStats[] = [];
+    unitMap.forEach((value, key) => {
+      result.push({
+        unitName: key,
+        obstacleCount: value.obstacleCount,
+        rectificationCount: value.rectificationCount,
+        overdueCount: value.overdueCount,
+        taskCount: value.taskCount,
+        completedTaskCount: value.completedTaskCount,
+        taskCompletionRate: value.taskCount > 0 ? Math.round((value.completedTaskCount / value.taskCount) * 100) : 0,
+      });
+    });
+
+    return result.sort((a, b) => b.obstacleCount - a.obstacleCount);
+  },
 }));

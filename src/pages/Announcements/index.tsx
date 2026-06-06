@@ -13,6 +13,7 @@ import {
   Trash2,
   Send,
   RotateCcw,
+  Clock,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -22,9 +23,10 @@ import type { Announcement } from '@/types';
 import { getAnnouncementTypeName, formatDate, formatDateTime } from '@/utils/helpers';
 
 const AnnouncementsPage: React.FC = () => {
-  const { announcements, addAnnouncement, publishAnnouncement, deleteAnnouncement, updateAnnouncement, withdrawAnnouncement } = useAppStore();
+  const { announcements, addAnnouncement, publishAnnouncement, deleteAnnouncement, updateAnnouncement, withdrawAnnouncement, scheduleAnnouncement } = useAppStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
   const [showPublishModal, setShowPublishModal] = useState(false);
@@ -34,25 +36,31 @@ const AnnouncementsPage: React.FC = () => {
     title: '',
     type: 'notice' as 'notice' | 'warning' | 'policy',
     content: '',
+    isScheduled: false,
+    scheduledPublishTime: '',
   });
   const [publishForm, setPublishForm] = useState({
     title: '',
     type: 'notice' as 'notice' | 'warning' | 'policy',
     content: '',
+    isScheduled: false,
+    scheduledPublishTime: '',
   });
 
   const stats = useMemo(() => ({
     notice: announcements.filter(a => a.type === 'notice').length,
     warning: announcements.filter(a => a.type === 'warning').length,
     policy: announcements.filter(a => a.type === 'policy').length,
+    scheduled: announcements.filter(a => a.status === 'scheduled').length,
   }), [announcements]);
 
   const filteredAnnouncements = useMemo(() => announcements.filter((a) => {
     const matchSearch = a.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       a.content.toLowerCase().includes(searchTerm.toLowerCase());
     const matchType = typeFilter === 'all' || a.type === typeFilter;
-    return matchSearch && matchType;
-  }), [announcements, searchTerm, typeFilter]);
+    const matchStatus = statusFilter === 'all' || a.status === statusFilter;
+    return matchSearch && matchType && matchStatus;
+  }), [announcements, searchTerm, typeFilter, statusFilter]);
 
   const currentAnnouncement = useMemo(() =>
     selectedAnnouncement ? announcements.find(a => a.id === selectedAnnouncement.id) || null : null,
@@ -68,25 +76,43 @@ const AnnouncementsPage: React.FC = () => {
       title: '',
       type: 'notice',
       content: '',
+      isScheduled: false,
+      scheduledPublishTime: '',
     });
     setShowPublishModal(true);
   };
 
   const handlePublishNew = () => {
     if (publishForm.title && publishForm.content) {
-      addAnnouncement({
-        title: publishForm.title,
-        type: publishForm.type,
-        content: publishForm.content,
-        status: 'published',
-        author: '管理员',
-        publishTime: new Date().toISOString(),
-      });
+      if (publishForm.isScheduled && publishForm.scheduledPublishTime) {
+        addAnnouncement({
+          title: publishForm.title,
+          type: publishForm.type,
+          content: publishForm.content,
+          status: 'scheduled',
+          author: '管理员',
+          scheduledPublishTime: new Date(publishForm.scheduledPublishTime).toISOString(),
+        });
+      } else {
+        addAnnouncement({
+          title: publishForm.title,
+          type: publishForm.type,
+          content: publishForm.content,
+          status: 'published',
+          author: '管理员',
+          publishTime: new Date().toISOString(),
+        });
+      }
       setShowPublishModal(false);
     }
   };
 
   const handlePublishDraft = (id: string) => {
+    publishAnnouncement(id);
+    setShowDetailModal(false);
+  };
+
+  const handlePublishScheduled = (id: string) => {
     publishAnnouncement(id);
     setShowDetailModal(false);
   };
@@ -105,6 +131,10 @@ const AnnouncementsPage: React.FC = () => {
       title: announcement.title,
       type: announcement.type,
       content: announcement.content,
+      isScheduled: !!announcement.scheduledPublishTime,
+      scheduledPublishTime: announcement.scheduledPublishTime
+        ? new Date(announcement.scheduledPublishTime).toISOString().slice(0, 16)
+        : '',
     });
     setShowEditModal(true);
     setShowDetailModal(false);
@@ -112,11 +142,21 @@ const AnnouncementsPage: React.FC = () => {
 
   const handleSaveEdit = () => {
     if (editForm.title && editForm.content) {
-      updateAnnouncement(editForm.id, {
-        title: editForm.title,
-        type: editForm.type,
-        content: editForm.content,
-      });
+      if (editForm.isScheduled && editForm.scheduledPublishTime) {
+        scheduleAnnouncement(editForm.id, new Date(editForm.scheduledPublishTime).toISOString());
+        updateAnnouncement(editForm.id, {
+          title: editForm.title,
+          type: editForm.type,
+          content: editForm.content,
+        });
+      } else {
+        updateAnnouncement(editForm.id, {
+          title: editForm.title,
+          type: editForm.type,
+          content: editForm.content,
+          scheduledPublishTime: undefined,
+        });
+      }
       setShowEditModal(false);
     }
   };
@@ -160,7 +200,7 @@ const AnnouncementsPage: React.FC = () => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
@@ -200,6 +240,19 @@ const AnnouncementsPage: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">待发布</p>
+                <p className="text-2xl font-bold text-orange-600 mt-1">{stats.scheduled}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-orange-100 text-orange-600">
+                <Clock size={24} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
@@ -225,6 +278,16 @@ const AnnouncementsPage: React.FC = () => {
                 <option value="notice">通知公告</option>
                 <option value="warning">预警提示</option>
                 <option value="policy">政策法规</option>
+              </select>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="all">全部状态</option>
+                <option value="draft">草稿</option>
+                <option value="scheduled">待发布</option>
+                <option value="published">已发布</option>
               </select>
             </div>
             <div className="text-sm text-gray-500">
@@ -260,8 +323,16 @@ const AnnouncementsPage: React.FC = () => {
                           <Calendar size={14} />
                           {announcement.status === 'published' && announcement.publishTime
                             ? formatDate(announcement.publishTime)
+                            : announcement.status === 'scheduled' && announcement.scheduledPublishTime
+                            ? `计划发布：${formatDate(announcement.scheduledPublishTime)}`
                             : '草稿'}
                         </span>
+                        {announcement.status === 'scheduled' && announcement.scheduledPublishTime && (
+                          <span className="flex items-center gap-1 text-orange-600">
+                            <Clock size={14} />
+                            计划发布时间：{formatDateTime(announcement.scheduledPublishTime)}
+                          </span>
+                        )}
                         <span className="flex items-center gap-1">
                           <Eye size={14} />
                           {announcement.views} 次阅读
@@ -277,6 +348,19 @@ const AnnouncementsPage: React.FC = () => {
                         </Button>
                         <Button size="sm" onClick={() => handlePublishDraft(announcement.id)}>
                           <Send size={14} className="mr-1" /> 发布
+                        </Button>
+                      </>
+                    )}
+                    {announcement.status === 'scheduled' && (
+                      <>
+                        <Button size="sm" variant="secondary" onClick={(e) => handleOpenEditModal(announcement, e)}>
+                          <Edit size={14} className="mr-1" /> 编辑
+                        </Button>
+                        <Button size="sm" onClick={() => handlePublishScheduled(announcement.id)}>
+                          <Send size={14} className="mr-1" /> 立即发布
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={(e) => handleWithdraw(announcement.id, e)}>
+                          <RotateCcw size={14} className="mr-1" /> 撤回
                         </Button>
                       </>
                     )}
@@ -337,6 +421,8 @@ const AnnouncementsPage: React.FC = () => {
                     <Calendar size={14} />
                     {currentAnnouncement.status === 'published' && currentAnnouncement.publishTime
                       ? formatDateTime(currentAnnouncement.publishTime)
+                      : currentAnnouncement.status === 'scheduled' && currentAnnouncement.scheduledPublishTime
+                      ? `计划发布：${formatDateTime(currentAnnouncement.scheduledPublishTime)}`
                       : `创建于 ${formatDateTime(currentAnnouncement.createdAt)}`
                     }
                   </span>
@@ -367,6 +453,19 @@ const AnnouncementsPage: React.FC = () => {
                     编辑
                   </Button>
                   <Button onClick={() => handlePublishDraft(currentAnnouncement.id)}>立即发布</Button>
+                </>
+              )}
+              {currentAnnouncement.status === 'scheduled' && (
+                <>
+                  <Button variant="secondary" onClick={() => handleOpenEditModal(currentAnnouncement)}>
+                    <Edit size={16} className="mr-2" />
+                    编辑
+                  </Button>
+                  <Button onClick={() => handlePublishScheduled(currentAnnouncement.id)}>立即发布</Button>
+                  <Button variant="secondary" onClick={() => handleWithdraw(currentAnnouncement.id)}>
+                    <RotateCcw size={16} className="mr-2" />
+                    撤回
+                  </Button>
                 </>
               )}
               {currentAnnouncement.status === 'published' && (
@@ -425,6 +524,28 @@ const AnnouncementsPage: React.FC = () => {
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
                 />
               </div>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editForm.isScheduled}
+                    onChange={(e) => setEditForm(p => ({ ...p, isScheduled: e.target.checked }))}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700">定时发布</span>
+                </label>
+              </div>
+              {editForm.isScheduled && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">发布时间</label>
+                  <input
+                    type="datetime-local"
+                    value={editForm.scheduledPublishTime}
+                    onChange={(e) => setEditForm(p => ({ ...p, scheduledPublishTime: e.target.value }))}
+                    className="w-full h-11 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+              )}
             </div>
             <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
               <Button variant="secondary" onClick={() => setShowEditModal(false)}>取消</Button>
@@ -482,12 +603,34 @@ const AnnouncementsPage: React.FC = () => {
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
                 />
               </div>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={publishForm.isScheduled}
+                    onChange={(e) => setPublishForm(p => ({ ...p, isScheduled: e.target.checked }))}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700">定时发布</span>
+                </label>
+              </div>
+              {publishForm.isScheduled && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">发布时间</label>
+                  <input
+                    type="datetime-local"
+                    value={publishForm.scheduledPublishTime}
+                    onChange={(e) => setPublishForm(p => ({ ...p, scheduledPublishTime: e.target.value }))}
+                    className="w-full h-11 rounded-lg border border-gray-200 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+              )}
             </div>
             <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
               <Button variant="secondary" onClick={() => setShowPublishModal(false)}>取消</Button>
               <Button onClick={handlePublishNew} disabled={!publishForm.title || !publishForm.content}>
                 <Send size={16} className="mr-2" />
-                立即发布
+                {publishForm.isScheduled ? '设置定时发布' : '立即发布'}
               </Button>
             </div>
           </div>
