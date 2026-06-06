@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Search,
   MessageSquare,
@@ -22,6 +23,7 @@ import type { PublicReport, PatrolTask } from '@/types';
 import { formatDate, formatDateTime } from '@/utils/helpers';
 
 const PublicReportPage: React.FC = () => {
+  const location = useLocation();
   const { publicReports, patrolTasks, approveReport, rejectReport, mergeReport, createTaskFromReport } = useAppStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -36,6 +38,17 @@ const PublicReportPage: React.FC = () => {
   const [taskStartTime, setTaskStartTime] = useState<string>('');
   const [showTaskDetail, setShowTaskDetail] = useState(false);
   const [relatedTask, setRelatedTask] = useState<PatrolTask | null>(null);
+
+  useEffect(() => {
+    const state = location.state as { openReportId?: string };
+    if (state?.openReportId) {
+      const report = publicReports.find(r => r.id === state.openReportId);
+      if (report) {
+        setSelectedReport(report);
+        setShowDetailModal(true);
+      }
+    }
+  }, [location.state, publicReports]);
 
   const stats = useMemo(() => ({
     pending: publicReports.filter(r => r.status === 'pending').length,

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Building2,
   ClipboardList,
@@ -13,14 +13,38 @@ import { StatCard } from '@/components/common/StatCard';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatusTag } from '@/components/common/StatusTag';
-import { mockStatistics, mockRiskHotspots } from '@/data/reports';
-import { mockPatrolTasks } from '@/data/tasks';
-import { mockObstacles as obstaclesData } from '@/data/obstacles';
+import { mockRiskHotspots } from '@/data/reports';
 import { getObstacleTypeName, formatDate } from '@/utils/helpers';
 import { useNavigate } from 'react-router-dom';
+import { useAppStore } from '@/store/useAppStore';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { obstacles, patrolTasks } = useAppStore();
+
+  const statistics = useMemo(() => {
+    const now = new Date();
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const totalObstacles = obstacles.length;
+    const pendingTasks = patrolTasks.filter(t => t.status === 'pending').length;
+    const newThisMonth = obstacles.filter(o => new Date(o.createdAt) >= firstDayOfMonth).length;
+    const overheightWarnings = obstacles.filter(o => o.status === 'overheight').length;
+    
+    const totalTasks = patrolTasks.length;
+    const completedTasks = patrolTasks.filter(t => t.status === 'completed').length;
+    const taskCompletionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+    return {
+      totalObstacles,
+      pendingTasks,
+      newThisMonth,
+      overheightWarnings,
+      taskCompletionRate,
+      completedTasks,
+      inProgressTasks: patrolTasks.filter(t => t.status === 'in_progress').length,
+    };
+  }, [obstacles, patrolTasks]);
 
   return (
     <div className="space-y-6">
@@ -44,28 +68,28 @@ const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="障碍物总数"
-          value={mockStatistics.totalObstacles}
+          value={statistics.totalObstacles}
           icon={<Building2 size={24} />}
           trend={{ value: 12.5, isUp: true }}
           color="blue"
         />
         <StatCard
           title="待处理任务"
-          value={mockStatistics.pendingTasks}
+          value={statistics.pendingTasks}
           icon={<ClipboardList size={24} />}
           trend={{ value: 5.2, isUp: false }}
           color="amber"
         />
         <StatCard
           title="本月新增"
-          value={mockStatistics.newThisMonth}
+          value={statistics.newThisMonth}
           icon={<Plus size={24} />}
           trend={{ value: 8.3, isUp: true }}
           color="green"
         />
         <StatCard
           title="超高预警"
-          value={mockStatistics.overheightWarnings}
+          value={statistics.overheightWarnings}
           icon={<AlertTriangle size={24} />}
           trend={{ value: 2.1, isUp: true }}
           color="red"
@@ -100,7 +124,7 @@ const Dashboard: React.FC = () => {
                 </div>
 
                 <div className="absolute inset-0 p-6">
-                  {obstaclesData.map((obstacle, index) => {
+                  {obstacles.map((obstacle, index) => {
                     const x = 50 + (obstacle.longitude - 121.43) * 1500;
                     const y = 50 + (31.25 - obstacle.latitude) * 4000;
                     const colors: Record<string, string> = {
@@ -250,23 +274,23 @@ const Dashboard: React.FC = () => {
                       fill="none"
                       stroke="#2563EB"
                       strokeWidth="12"
-                      strokeDasharray={`${mockStatistics.taskCompletionRate * 3.52} 352`}
+                      strokeDasharray={`${statistics.taskCompletionRate * 3.52} 352`}
                       strokeLinecap="round"
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-2xl font-bold text-gray-900">{mockStatistics.taskCompletionRate}%</span>
+                    <span className="text-2xl font-bold text-gray-900">{statistics.taskCompletionRate}%</span>
                     <span className="text-xs text-gray-500">完成率</span>
                   </div>
                 </div>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-4 text-center">
                 <div>
-                  <p className="text-2xl font-bold text-gray-900">18</p>
+                  <p className="text-2xl font-bold text-gray-900">{statistics.completedTasks}</p>
                   <p className="text-xs text-gray-500">已完成</p>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-amber-600">5</p>
+                  <p className="text-2xl font-bold text-amber-600">{statistics.inProgressTasks}</p>
                   <p className="text-xs text-gray-500">进行中</p>
                 </div>
               </div>
@@ -290,7 +314,7 @@ const Dashboard: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {mockPatrolTasks.slice(0, 4).map((task) => (
+              {patrolTasks.slice(0, 4).map((task) => (
                 <div
                   key={task.id}
                   className="flex items-center justify-between p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
@@ -338,7 +362,7 @@ const Dashboard: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {obstaclesData.filter(o => o.status !== 'normal').slice(0, 4).map((obstacle) => (
+              {obstacles.filter(o => o.status !== 'normal').slice(0, 4).map((obstacle) => (
                 <div
                   key={obstacle.id}
                   className="flex items-center justify-between p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"

@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -34,11 +35,23 @@ interface NewRoutePoint {
 }
 
 const PatrolTasksPage: React.FC = () => {
+  const location = useLocation();
   const { patrolTasks, publicReports, addPatrolTask, startTask, checkRoutePoint } = useAppStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState<PatrolTask | null>(null);
+
+  useEffect(() => {
+    const state = location.state as { openTaskId?: string };
+    if (state?.openTaskId) {
+      const task = patrolTasks.find(t => t.id === state.openTaskId);
+      if (task) {
+        setSelectedTask(task);
+        setShowDetailModal(true);
+      }
+    }
+  }, [location.state, patrolTasks]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showPatrolModal, setShowPatrolModal] = useState(false);
   const [selectedPoint, setSelectedPoint] = useState<RoutePoint | null>(null);

@@ -51,114 +51,195 @@ const Reports = () => {
   const [timeRange, setTimeRange] = useState<TimeRange>('month');
   const [unitDimension, setUnitDimension] = useState<UnitDimension>('all');
   const getUnitStats = useAppStore((state) => state.getUnitStats);
+  const obstacles = useAppStore((state) => state.obstacles);
+  const patrolTasks = useAppStore((state) => state.patrolTasks);
+  const rectificationNotices = useAppStore((state) => state.rectificationNotices);
+  const publicReports = useAppStore((state) => state.publicReports);
+
+  const startDate = useMemo(() => {
+    const now = new Date();
+    switch (timeRange) {
+      case 'month':
+        return new Date(now.getFullYear(), now.getMonth(), 1);
+      case 'quarter':
+        const quarter = Math.floor(now.getMonth() / 3);
+        return new Date(now.getFullYear(), quarter * 3, 1);
+      case 'year':
+        return new Date(now.getFullYear(), 0, 1);
+      default:
+        return new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+  }, [timeRange]);
+
+  const filteredObstacles = useMemo(() => {
+    return obstacles.filter((o) => new Date(o.createdAt) >= startDate);
+  }, [obstacles, startDate]);
+
+  const filteredPatrolTasks = useMemo(() => {
+    return patrolTasks.filter((t) => new Date(t.createdAt) >= startDate);
+  }, [patrolTasks, startDate]);
+
+  const filteredRectificationNotices = useMemo(() => {
+    return rectificationNotices.filter((n) => new Date(n.issueTime) >= startDate);
+  }, [rectificationNotices, startDate]);
+
+  const filteredPublicReports = useMemo(() => {
+    return publicReports.filter((r) => new Date(r.createdAt) >= startDate);
+  }, [publicReports, startDate]);
 
   const statisticsByTimeRange = useMemo(() => {
-    const base = {
-      totalObstacles: 156,
-      pendingTasks: 12,
-      newThisMonth: 23,
-      overheightWarnings: 5,
-      taskCompletionRate: 78.5,
-      reportProcessingRate: 85.2,
+    const totalObstacles = filteredObstacles.length;
+    const overheightWarnings = filteredObstacles.filter((o) => o.status === 'overheight').length;
+    const completedTasks = filteredPatrolTasks.filter((t) => t.status === 'completed').length;
+    const taskCompletionRate = filteredPatrolTasks.length > 0
+      ? parseFloat(((completedTasks / filteredPatrolTasks.length) * 100).toFixed(1))
+      : 0;
+    const reportProcessingRate = 85.2;
+
+    return {
+      totalObstacles,
+      pendingTasks: filteredPatrolTasks.filter((t) => t.status !== 'completed').length,
+      newThisMonth: totalObstacles,
+      overheightWarnings,
+      taskCompletionRate,
+      reportProcessingRate,
     };
-    
-    switch (timeRange) {
-      case 'month':
-        return {
-          ...base,
-          totalObstacles: 156,
-          newThisMonth: 23,
-          overheightWarnings: 5,
-          taskCompletionRate: 78.5,
-          reportProcessingRate: 85.2,
-          pendingTasks: 12,
-        };
-      case 'quarter':
-        return {
-          ...base,
-          totalObstacles: 142,
-          newThisMonth: 68,
-          overheightWarnings: 12,
-          taskCompletionRate: 82.3,
-          reportProcessingRate: 88.7,
-          pendingTasks: 8,
-        };
-      case 'year':
-        return {
-          ...base,
-          totalObstacles: 156,
-          newThisMonth: 245,
-          overheightWarnings: 38,
-          taskCompletionRate: 86.4,
-          reportProcessingRate: 91.2,
-          pendingTasks: 5,
-        };
-      default:
-        return base;
-    }
-  }, [timeRange]);
+  }, [filteredObstacles, filteredPatrolTasks]);
 
   const trendDataByTimeRange = useMemo(() => {
+    const now = new Date();
+    const data: { name: string; obstacles: number; tasks: number; reports: number }[] = [];
+
+    const countByDate = (items: { createdAt: string }[], start: Date, end: Date) => {
+      return items.filter((item) => {
+        const date = new Date(item.createdAt);
+        return date >= start && date < end;
+      }).length;
+    };
+
+    const countNoticesByDate = (items: { issueTime: string }[], start: Date, end: Date) => {
+      return items.filter((item) => {
+        const date = new Date(item.issueTime);
+        return date >= start && date < end;
+      }).length;
+    };
+
     switch (timeRange) {
-      case 'month':
-        return [
-          { name: '第1周', obstacles: 5, tasks: 3, reports: 2 },
-          { name: '第2周', obstacles: 7, tasks: 5, reports: 3 },
-          { name: '第3周', obstacles: 6, tasks: 4, reports: 2 },
-          { name: '第4周', obstacles: 5, tasks: 0, reports: 1 },
-        ];
-      case 'quarter':
-        return [
-          { name: '4月', obstacles: 20, tasks: 15, reports: 11 },
-          { name: '5月', obstacles: 22, tasks: 18, reports: 13 },
-          { name: '6月', obstacles: 26, tasks: 12, reports: 8 },
-        ];
-      case 'year':
-        return [
-          { name: '1月', obstacles: 12, tasks: 8, reports: 5 },
-          { name: '2月', obstacles: 15, tasks: 10, reports: 7 },
-          { name: '3月', obstacles: 18, tasks: 12, reports: 9 },
-          { name: '4月', obstacles: 20, tasks: 15, reports: 11 },
-          { name: '5月', obstacles: 22, tasks: 18, reports: 13 },
-          { name: '6月', obstacles: 26, tasks: 12, reports: 8 },
-          { name: '7月', obstacles: 24, tasks: 16, reports: 10 },
-          { name: '8月', obstacles: 28, tasks: 20, reports: 12 },
-          { name: '9月', obstacles: 25, tasks: 14, reports: 9 },
-          { name: '10月', obstacles: 30, tasks: 22, reports: 15 },
-          { name: '11月', obstacles: 27, tasks: 18, reports: 11 },
-          { name: '12月', obstacles: 29, tasks: 20, reports: 13 },
-        ];
-      default:
-        return [];
+      case 'month': {
+        const weeks = 4;
+        const weekMs = 7 * 24 * 60 * 60 * 1000;
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        for (let i = 0; i < weeks; i++) {
+          const weekStart = new Date(monthStart.getTime() + i * weekMs);
+          const weekEnd = new Date(monthStart.getTime() + (i + 1) * weekMs);
+          data.push({
+            name: `第${i + 1}周`,
+            obstacles: countByDate(filteredObstacles, weekStart, weekEnd),
+            tasks: countByDate(filteredPatrolTasks, weekStart, weekEnd),
+            reports: countByDate(filteredPublicReports, weekStart, weekEnd),
+          });
+        }
+        break;
+      }
+      case 'quarter': {
+        const quarter = Math.floor(now.getMonth() / 3);
+        for (let i = 0; i < 3; i++) {
+          const monthStart = new Date(now.getFullYear(), quarter * 3 + i, 1);
+          const monthEnd = new Date(now.getFullYear(), quarter * 3 + i + 1, 1);
+          const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+          data.push({
+            name: monthNames[quarter * 3 + i],
+            obstacles: countByDate(filteredObstacles, monthStart, monthEnd),
+            tasks: countByDate(filteredPatrolTasks, monthStart, monthEnd),
+            reports: countByDate(filteredPublicReports, monthStart, monthEnd),
+          });
+        }
+        break;
+      }
+      case 'year': {
+        const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+        for (let i = 0; i < 12; i++) {
+          const monthStart = new Date(now.getFullYear(), i, 1);
+          const monthEnd = new Date(now.getFullYear(), i + 1, 1);
+          data.push({
+            name: monthNames[i],
+            obstacles: countByDate(filteredObstacles, monthStart, monthEnd),
+            tasks: countByDate(filteredPatrolTasks, monthStart, monthEnd),
+            reports: countByDate(filteredPublicReports, monthStart, monthEnd),
+          });
+        }
+        break;
+      }
     }
-  }, [timeRange]);
+
+    return data;
+  }, [timeRange, filteredObstacles, filteredPatrolTasks, filteredPublicReports]);
 
   const taskCompletionData = useMemo(() => {
+    const now = new Date();
+    const data: { name: string; completed: number; total: number }[] = [];
+
+    const countTasksByDate = (start: Date, end: Date) => {
+      const tasks = filteredPatrolTasks.filter((t) => {
+        const date = new Date(t.createdAt);
+        return date >= start && date < end;
+      });
+      return {
+        total: tasks.length,
+        completed: tasks.filter((t) => t.status === 'completed').length,
+      };
+    };
+
     switch (timeRange) {
-      case 'month':
-        return [
-          { name: '第1周', completed: 15, total: 20 },
-          { name: '第2周', completed: 18, total: 22 },
-          { name: '第3周', completed: 12, total: 18 },
-          { name: '第4周', completed: 20, total: 25 },
-        ];
-      case 'quarter':
-        return [
-          { name: '4月', completed: 45, total: 55 },
-          { name: '5月', completed: 52, total: 60 },
-          { name: '6月', completed: 48, total: 58 },
-        ];
-      case 'year':
-        return [
-          { name: 'Q1', completed: 120, total: 145 },
-          { name: 'Q2', completed: 145, total: 173 },
-          { name: 'Q3', completed: 135, total: 162 },
-          { name: 'Q4', completed: 158, total: 180 },
-        ];
-      default:
-        return [];
+      case 'month': {
+        const weeks = 4;
+        const weekMs = 7 * 24 * 60 * 60 * 1000;
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        for (let i = 0; i < weeks; i++) {
+          const weekStart = new Date(monthStart.getTime() + i * weekMs);
+          const weekEnd = new Date(monthStart.getTime() + (i + 1) * weekMs);
+          const counts = countTasksByDate(weekStart, weekEnd);
+          data.push({
+            name: `第${i + 1}周`,
+            completed: counts.completed,
+            total: counts.total,
+          });
+        }
+        break;
+      }
+      case 'quarter': {
+        const quarter = Math.floor(now.getMonth() / 3);
+        for (let i = 0; i < 3; i++) {
+          const monthStart = new Date(now.getFullYear(), quarter * 3 + i, 1);
+          const monthEnd = new Date(now.getFullYear(), quarter * 3 + i + 1, 1);
+          const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+          const counts = countTasksByDate(monthStart, monthEnd);
+          data.push({
+            name: monthNames[quarter * 3 + i],
+            completed: counts.completed,
+            total: counts.total,
+          });
+        }
+        break;
+      }
+      case 'year': {
+        const quarterNames = ['Q1', 'Q2', 'Q3', 'Q4'];
+        for (let i = 0; i < 4; i++) {
+          const quarterStart = new Date(now.getFullYear(), i * 3, 1);
+          const quarterEnd = new Date(now.getFullYear(), i * 3 + 3, 1);
+          const counts = countTasksByDate(quarterStart, quarterEnd);
+          data.push({
+            name: quarterNames[i],
+            completed: counts.completed,
+            total: counts.total,
+          });
+        }
+        break;
+      }
     }
-  }, [timeRange]);
+
+    return data;
+  }, [timeRange, filteredPatrolTasks]);
 
   const areaTrendData = useMemo(() => {
     return trendDataByTimeRange.map((item) => ({
@@ -169,7 +250,7 @@ const Reports = () => {
 
   const trendTitle = useMemo(() => {
     switch (timeRange) {
-      case 'month': return '本周趋势分析';
+      case 'month': return '本月趋势分析';
       case 'quarter': return '季度趋势分析';
       case 'year': return '年度趋势分析';
       default: return '趋势分析';
@@ -177,33 +258,12 @@ const Reports = () => {
   }, [timeRange]);
 
   const quickStats = useMemo(() => {
-    switch (timeRange) {
-      case 'month':
-        return {
-          newObstacles: 23,
-          pendingTasks: 12,
-          warnings: 5,
-        };
-      case 'quarter':
-        return {
-          newObstacles: 68,
-          pendingTasks: 8,
-          warnings: 12,
-        };
-      case 'year':
-        return {
-          newObstacles: 245,
-          pendingTasks: 5,
-          warnings: 38,
-        };
-      default:
-        return {
-          newObstacles: 23,
-          pendingTasks: 12,
-          warnings: 5,
-        };
-    }
-  }, [timeRange]);
+    return {
+      newObstacles: filteredObstacles.length,
+      pendingTasks: filteredPatrolTasks.filter((t) => t.status !== 'completed').length,
+      warnings: filteredObstacles.filter((o) => o.status === 'overheight').length,
+    };
+  }, [filteredObstacles, filteredPatrolTasks]);
 
   const newObstaclesLabel = useMemo(() => {
     switch (timeRange) {

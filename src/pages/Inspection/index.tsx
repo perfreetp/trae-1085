@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   AlertTriangle,
   FileCheck,
@@ -25,6 +26,7 @@ import type { RectificationNotice, Obstacle } from '@/types';
 import { formatDate, formatDateTime, getObstacleTypeName } from '@/utils/helpers';
 
 const Inspection: React.FC = () => {
+  const location = useLocation();
   const {
     obstacles,
     rectificationNotices,
@@ -40,6 +42,20 @@ const Inspection: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'warnings' | 'rectifications'>('warnings');
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedNotice, setSelectedNotice] = useState<RectificationNotice | null>(null);
+
+  useEffect(() => {
+    const state = location.state as { openNoticeId?: string; openTab?: 'warnings' | 'rectifications' };
+    if (state?.openTab) {
+      setActiveTab(state.openTab);
+    }
+    if (state?.openNoticeId) {
+      const notice = rectificationNotices.find(n => n.id === state.openNoticeId);
+      if (notice) {
+        setSelectedNotice(notice);
+        setShowDetailModal(true);
+      }
+    }
+  }, [location.state, rectificationNotices]);
   const [showIssueModal, setShowIssueModal] = useState(false);
   const [selectedObstacle, setSelectedObstacle] = useState<Obstacle | null>(null);
   const [issueForm, setIssueForm] = useState({
@@ -558,8 +574,8 @@ const Inspection: React.FC = () => {
                             </Button>
                           </>
                         )}
-                        {notice.status !== 'completed' && !overdue && (
-                          <Button size="sm" variant="warning" onClick={(e) => handleOpenUrgeModal(notice, e)}>
+                        {notice.status !== 'completed' && (
+                          <Button size="sm" variant={overdue ? 'danger' : 'warning'} onClick={(e) => handleOpenUrgeModal(notice, e)}>
                             <Bell size={14} className="mr-1" /> 催办
                           </Button>
                         )}

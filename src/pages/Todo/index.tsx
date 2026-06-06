@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -21,6 +22,7 @@ import type { TodoItem } from '@/types';
 type FilterType = 'all' | 'report_pending' | 'notice_receive' | 'notice_recheck' | 'notice_overdue' | 'task_pending';
 
 const Todo = () => {
+  const navigate = useNavigate();
   const { getTodoList, currentUser } = useAppStore();
   const [filterType, setFilterType] = useState<FilterType>('all');
 
@@ -64,7 +66,19 @@ const Todo = () => {
   };
 
   const handleProcess = (item: TodoItem) => {
-    alert(`跳转到${item.sourceModule}模块处理：${item.title}`);
+    switch (item.type) {
+      case 'report_pending':
+        navigate('/public-report', { state: { openReportId: item.relatedId } });
+        break;
+      case 'notice_receive':
+      case 'notice_recheck':
+      case 'notice_overdue':
+        navigate('/inspection', { state: { openNoticeId: item.relatedId, openTab: 'rectifications' } });
+        break;
+      case 'task_pending':
+        navigate('/patrol-tasks', { state: { openTaskId: item.relatedId } });
+        break;
+    }
   };
 
   const filterTabs = [

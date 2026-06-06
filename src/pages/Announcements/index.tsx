@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Plus,
   Search,
@@ -47,18 +47,42 @@ const AnnouncementsPage: React.FC = () => {
     scheduledPublishTime: '',
   });
 
+  useEffect(() => {
+    const now = new Date();
+    announcements.forEach((announcement) => {
+      if (announcement.status === 'scheduled' && announcement.scheduledPublishTime) {
+        const scheduledTime = new Date(announcement.scheduledPublishTime);
+        if (scheduledTime <= now) {
+          publishAnnouncement(announcement.id);
+        }
+      }
+    });
+  }, []);
+
+  const getEffectiveStatus = (announcement: Announcement): Announcement['status'] => {
+    const now = new Date();
+    if (announcement.scheduledPublishTime && new Date(announcement.scheduledPublishTime) <= now) {
+      return 'published';
+    }
+    return announcement.status;
+  };
+
   const stats = useMemo(() => ({
     notice: announcements.filter(a => a.type === 'notice').length,
     warning: announcements.filter(a => a.type === 'warning').length,
     policy: announcements.filter(a => a.type === 'policy').length,
-    scheduled: announcements.filter(a => a.status === 'scheduled').length,
+    scheduled: announcements.filter(a => {
+      const now = new Date();
+      return a.status === 'scheduled' && a.scheduledPublishTime && new Date(a.scheduledPublishTime) > now;
+    }).length,
   }), [announcements]);
 
   const filteredAnnouncements = useMemo(() => announcements.filter((a) => {
     const matchSearch = a.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       a.content.toLowerCase().includes(searchTerm.toLowerCase());
     const matchType = typeFilter === 'all' || a.type === typeFilter;
-    const matchStatus = statusFilter === 'all' || a.status === statusFilter;
+    const effectiveStatus = getEffectiveStatus(a);
+    const matchStatus = statusFilter === 'all' || effectiveStatus === statusFilter;
     return matchSearch && matchType && matchStatus;
   }), [announcements, searchTerm, typeFilter, statusFilter]);
 
@@ -84,23 +108,35 @@ const AnnouncementsPage: React.FC = () => {
 
   const handlePublishNew = () => {
     if (publishForm.title && publishForm.content) {
+      const now = new Date();
       if (publishForm.isScheduled && publishForm.scheduledPublishTime) {
-        addAnnouncement({
-          title: publishForm.title,
-          type: publishForm.type,
-          content: publishForm.content,
-          status: 'scheduled',
-          author: '管理员',
-          scheduledPublishTime: new Date(publishForm.scheduledPublishTime).toISOString(),
-        });
+        const scheduledTime = new Date(publishForm.scheduledPublishTime);
+        if (scheduledTime <= now) {
+          addAnnouncement({
+            title: publishForm.title,
+            type: publishForm.type,
+            content: publishForm.content,
+            status: 'published',
+            author: '管理员',
+            publishTime: scheduledTime.toISOString(),
+          });
+        } else {
+          addAnnouncement({
+            title: publishForm.title,
+            type: publishForm.type,
+            content: publishForm.content,
+            status: 'scheduled',
+            author: '管理员',
+            scheduledPublishTime: scheduledTime.toISOString(),
+          });
+        }
       } else {
         addAnnouncement({
           title: publishForm.title,
           type: publishForm.type,
           content: publishForm.content,
-          status: 'published',
+          status: 'draft',
           author: '管理员',
-          publishTime: new Date().toISOString(),
         });
       }
       setShowPublishModal(false);
@@ -142,19 +178,36 @@ const AnnouncementsPage: React.FC = () => {
 
   const handleSaveEdit = () => {
     if (editForm.title && editForm.content) {
+      const now = new Date();
       if (editForm.isScheduled && editForm.scheduledPublishTime) {
-        scheduleAnnouncement(editForm.id, new Date(editForm.scheduledPublishTime).toISOString());
-        updateAnnouncement(editForm.id, {
-          title: editForm.title,
-          type: editForm.type,
-          content: editForm.content,
-        });
+        const scheduledTime = new Date(editForm.scheduledPublishTime);
+        if (scheduledTime <= now) {
+          updateAnnouncement(editForm.id, {
+            title: editForm.title,
+            type: editForm.type,
+            content: editForm.content,
+            status: 'published',
+            publishTime: scheduledTime.toISOString(),
+            scheduledPublishTime: undefined,
+          });
+        } else {
+          updateAnnouncement(editForm.id, {
+            title: editForm.title,
+            type: editForm.type,
+            content: editForm.content,
+            status: 'scheduled',
+            scheduledPublishTime: scheduledTime.toISOString(),
+            publishTime: undefined,
+          });
+        }
       } else {
         updateAnnouncement(editForm.id, {
           title: editForm.title,
           type: editForm.type,
           content: editForm.content,
+          status: 'draft',
           scheduledPublishTime: undefined,
+          publishTime: undefined,
         });
       }
       setShowEditModal(false);
@@ -297,88 +350,91 @@ const AnnouncementsPage: React.FC = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {filteredAnnouncements.map((announcement) => (
-              <div
-                key={announcement.id}
-                className="p-5 rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-sm transition-all cursor-pointer"
-                onClick={() => handleViewDetail(announcement)}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-4 flex-1">
-                    <div className={`p-3 rounded-xl ${getTypeColor(announcement.type)}`}>
-                      {getTypeIcon(announcement.type)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <h3 className="font-semibold text-gray-900">{announcement.title}</h3>
-                        <StatusTag status={announcement.status} type="announcement" />
+            {filteredAnnouncements.map((announcement) => {
+              const effectiveStatus = getEffectiveStatus(announcement);
+              return (
+                <div
+                  key={announcement.id}
+                  className="p-5 rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-sm transition-all cursor-pointer"
+                  onClick={() => handleViewDetail(announcement)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-4 flex-1">
+                      <div className={`p-3 rounded-xl ${getTypeColor(announcement.type)}`}>
+                        {getTypeIcon(announcement.type)}
                       </div>
-                      <p className="mt-2 text-sm text-gray-500 line-clamp-2">{announcement.content}</p>
-                      <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-500">
-                        <span className="flex items-center gap-1">
-                          <User size={14} />
-                          {announcement.author}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Calendar size={14} />
-                          {announcement.status === 'published' && announcement.publishTime
-                            ? formatDate(announcement.publishTime)
-                            : announcement.status === 'scheduled' && announcement.scheduledPublishTime
-                            ? `计划发布：${formatDate(announcement.scheduledPublishTime)}`
-                            : '草稿'}
-                        </span>
-                        {announcement.status === 'scheduled' && announcement.scheduledPublishTime && (
-                          <span className="flex items-center gap-1 text-orange-600">
-                            <Clock size={14} />
-                            计划发布时间：{formatDateTime(announcement.scheduledPublishTime)}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <h3 className="font-semibold text-gray-900">{announcement.title}</h3>
+                          <StatusTag status={effectiveStatus} type="announcement" />
+                        </div>
+                        <p className="mt-2 text-sm text-gray-500 line-clamp-2">{announcement.content}</p>
+                        <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-500">
+                          <span className="flex items-center gap-1">
+                            <User size={14} />
+                            {announcement.author}
                           </span>
-                        )}
-                        <span className="flex items-center gap-1">
-                          <Eye size={14} />
-                          {announcement.views} 次阅读
-                        </span>
+                          <span className="flex items-center gap-1">
+                            <Calendar size={14} />
+                            {effectiveStatus === 'published' && announcement.publishTime
+                              ? formatDate(announcement.publishTime)
+                              : effectiveStatus === 'scheduled' && announcement.scheduledPublishTime
+                              ? `计划发布：${formatDate(announcement.scheduledPublishTime)}`
+                              : '草稿'}
+                          </span>
+                          {effectiveStatus === 'scheduled' && announcement.scheduledPublishTime && (
+                            <span className="flex items-center gap-1 text-orange-600">
+                              <Clock size={14} />
+                              计划发布时间：{formatDateTime(announcement.scheduledPublishTime)}
+                            </span>
+                          )}
+                          <span className="flex items-center gap-1">
+                            <Eye size={14} />
+                            {announcement.views} 次阅读
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1 ml-4" onClick={(e) => e.stopPropagation()}>
-                    {announcement.status === 'draft' && (
-                      <>
-                        <Button size="sm" variant="secondary" onClick={(e) => handleOpenEditModal(announcement, e)}>
-                          <Edit size={14} className="mr-1" /> 编辑
-                        </Button>
-                        <Button size="sm" onClick={() => handlePublishDraft(announcement.id)}>
-                          <Send size={14} className="mr-1" /> 发布
-                        </Button>
-                      </>
-                    )}
-                    {announcement.status === 'scheduled' && (
-                      <>
-                        <Button size="sm" variant="secondary" onClick={(e) => handleOpenEditModal(announcement, e)}>
-                          <Edit size={14} className="mr-1" /> 编辑
-                        </Button>
-                        <Button size="sm" onClick={() => handlePublishScheduled(announcement.id)}>
-                          <Send size={14} className="mr-1" /> 立即发布
-                        </Button>
+                    <div className="flex items-center gap-1 ml-4" onClick={(e) => e.stopPropagation()}>
+                      {effectiveStatus === 'draft' && (
+                        <>
+                          <Button size="sm" variant="secondary" onClick={(e) => handleOpenEditModal(announcement, e)}>
+                            <Edit size={14} className="mr-1" /> 编辑
+                          </Button>
+                          <Button size="sm" onClick={() => handlePublishDraft(announcement.id)}>
+                            <Send size={14} className="mr-1" /> 发布
+                          </Button>
+                        </>
+                      )}
+                      {effectiveStatus === 'scheduled' && (
+                        <>
+                          <Button size="sm" variant="secondary" onClick={(e) => handleOpenEditModal(announcement, e)}>
+                            <Edit size={14} className="mr-1" /> 编辑
+                          </Button>
+                          <Button size="sm" onClick={() => handlePublishScheduled(announcement.id)}>
+                            <Send size={14} className="mr-1" /> 立即发布
+                          </Button>
+                          <Button size="sm" variant="secondary" onClick={(e) => handleWithdraw(announcement.id, e)}>
+                            <RotateCcw size={14} className="mr-1" /> 撤回
+                          </Button>
+                        </>
+                      )}
+                      {effectiveStatus === 'published' && (
                         <Button size="sm" variant="secondary" onClick={(e) => handleWithdraw(announcement.id, e)}>
                           <RotateCcw size={14} className="mr-1" /> 撤回
                         </Button>
-                      </>
-                    )}
-                    {announcement.status === 'published' && (
-                      <Button size="sm" variant="secondary" onClick={(e) => handleWithdraw(announcement.id, e)}>
-                        <RotateCcw size={14} className="mr-1" /> 撤回
-                      </Button>
-                    )}
-                    <button
-                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      onClick={(e) => handleDelete(announcement.id, e)}
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                      )}
+                      <button
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        onClick={(e) => handleDelete(announcement.id, e)}
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {filteredAnnouncements.length === 0 && (
               <div className="text-center py-12 text-gray-400">
                 <FileText size={48} className="mx-auto mb-4 opacity-50" />
@@ -419,9 +475,9 @@ const AnnouncementsPage: React.FC = () => {
                   </span>
                   <span className="flex items-center gap-1">
                     <Calendar size={14} />
-                    {currentAnnouncement.status === 'published' && currentAnnouncement.publishTime
+                    {getEffectiveStatus(currentAnnouncement) === 'published' && currentAnnouncement.publishTime
                       ? formatDateTime(currentAnnouncement.publishTime)
-                      : currentAnnouncement.status === 'scheduled' && currentAnnouncement.scheduledPublishTime
+                      : getEffectiveStatus(currentAnnouncement) === 'scheduled' && currentAnnouncement.scheduledPublishTime
                       ? `计划发布：${formatDateTime(currentAnnouncement.scheduledPublishTime)}`
                       : `创建于 ${formatDateTime(currentAnnouncement.createdAt)}`
                     }
@@ -430,7 +486,7 @@ const AnnouncementsPage: React.FC = () => {
                     <Eye size={14} />
                     {currentAnnouncement.views} 次阅读
                   </span>
-                  <StatusTag status={currentAnnouncement.status} type="announcement" />
+                  <StatusTag status={getEffectiveStatus(currentAnnouncement)} type="announcement" />
                 </div>
               </div>
 
@@ -446,7 +502,7 @@ const AnnouncementsPage: React.FC = () => {
             </div>
             <div className="flex justify-end gap-3 p-6 border-t border-gray-100">
               <Button variant="secondary" onClick={() => setShowDetailModal(false)}>关闭</Button>
-              {currentAnnouncement.status === 'draft' && (
+              {getEffectiveStatus(currentAnnouncement) === 'draft' && (
                 <>
                   <Button variant="secondary" onClick={() => handleOpenEditModal(currentAnnouncement)}>
                     <Edit size={16} className="mr-2" />
@@ -455,7 +511,7 @@ const AnnouncementsPage: React.FC = () => {
                   <Button onClick={() => handlePublishDraft(currentAnnouncement.id)}>立即发布</Button>
                 </>
               )}
-              {currentAnnouncement.status === 'scheduled' && (
+              {getEffectiveStatus(currentAnnouncement) === 'scheduled' && (
                 <>
                   <Button variant="secondary" onClick={() => handleOpenEditModal(currentAnnouncement)}>
                     <Edit size={16} className="mr-2" />
@@ -468,7 +524,7 @@ const AnnouncementsPage: React.FC = () => {
                   </Button>
                 </>
               )}
-              {currentAnnouncement.status === 'published' && (
+              {getEffectiveStatus(currentAnnouncement) === 'published' && (
                 <Button variant="secondary" onClick={() => handleWithdraw(currentAnnouncement.id)}>
                   <RotateCcw size={16} className="mr-2" />
                   撤回
